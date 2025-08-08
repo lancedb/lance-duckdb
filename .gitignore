@@ -1,7 +1,30 @@
+# Rust
 /target
-build
-configure
-.idea
-duckdb_unittest_tempdir
+Cargo.lock
+
+# DuckDB extension build
+build/
+configure/
+duckdb_unittest_tempdir/
 /test/bin
-venv
+
+# Python
+__pycache__/
+*.py[cod]
+venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Test data
+test/data/*.lance
+test/data/*.parquet
+
+# Temporary files
+*.tmp
+*.log

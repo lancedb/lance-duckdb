@@ -1,145 +1,134 @@
 # Lance DuckDB Extension
 
-A DuckDB extension that enables querying Lance format datasets directly, including S3-hosted data.
+A DuckDB extension that enables native querying of Lance format datasets, including support for cloud storage (S3, Azure, GCS).
 
 ## Features
 
-- **Direct Lance Support**: Query `.lance` files using standard SQL
-- **S3/Cloud Support**: Seamlessly query Lance datasets on S3, Azure, GCS
-- **Replacement Scan**: Use `SELECT * FROM 's3://bucket/data.lance'` syntax
-- **Projection Pushdown**: Only read required columns from Lance
-- **Filter Pushdown**: Push WHERE predicates to Lance scanner
-- **Type Mapping**: Automatic Arrow to DuckDB type conversion
-
-## Architecture
-
-```
-SQL Query → DuckDB Parser → Replacement Scan → lance_scan() → Lance Dataset → Results
-```
-
-### Key Components
-
-1. **lance_scan Table Function**: Core function that reads Lance datasets
-2. **Replacement Scan**: Automatically rewrites `.lance` paths to use lance_scan
-3. **Type Mapper**: Converts Arrow schema to DuckDB logical types
-4. **Async Runtime**: Handles Lance's async operations within DuckDB
+- **Native Lance Support**: Query `.lance` files directly using SQL
+- **Cloud Storage**: Seamlessly query Lance datasets on S3, Azure Blob Storage, and Google Cloud Storage
+- **Table Function**: Use `lance_scan()` to read Lance datasets
+- **Arrow Integration**: Automatic Arrow to DuckDB type conversion
+- **Performance**: Optimized for analytical workloads with Lance's columnar format
 
 ## Building
 
+### Prerequisites
+
+- Rust toolchain
+- DuckDB development files
+- Make
+
+### Build Steps
+
 ```bash
-# Install dependencies
-cargo build --release
+# Initialize submodules
+git submodule update --init --recursive
 
-# Or use make
+# Configure the build
+make configure
+
+# Build the extension
 make release
+```
 
-# Run tests
-make test
+The built extension will be available at `build/release/lance.duckdb_extension`.
+
+## Installation
+
+```sql
+-- Load the extension (with -unsigned flag for local builds)
+LOAD 'path/to/lance.duckdb_extension';
 ```
 
 ## Usage
 
 ### Basic Query
+
 ```sql
--- Load extension
-LOAD 'lance_duckdb';
+-- Query a local Lance file
+SELECT * FROM lance_scan('path/to/dataset.lance');
 
--- Query local Lance file
-SELECT * FROM 'data/dataset.lance' WHERE id > 100;
+-- Query from S3
+SELECT * FROM lance_scan('s3://bucket/path/dataset.lance');
 
--- Query S3 Lance dataset
-SELECT count(*) FROM 's3://bucket/path/data.lance';
+-- Aggregations
+SELECT COUNT(*), AVG(value) 
+FROM lance_scan('data.lance') 
+WHERE category = 'A';
 ```
 
-### Advanced Usage
+### With Filters and Projections
+
 ```sql
--- Use lance_scan directly with options
-SELECT * FROM lance_scan('s3://bucket/data.lance', 8192);
-
--- Projection pushdown (only reads specified columns)
-SELECT id, name FROM 'data/users.lance';
-
--- Filter pushdown
-SELECT * FROM 'data/events.lance' 
-WHERE timestamp >= '2024-01-01' AND category = 'purchase';
+-- Select specific columns
+SELECT id, name, timestamp 
+FROM lance_scan('dataset.lance')
+WHERE timestamp >= '2024-01-01'
+ORDER BY timestamp DESC
+LIMIT 100;
 ```
 
-## Implementation Details
+## Development
 
-### Type Mapping
+### Project Structure
 
-| Arrow Type | DuckDB Type |
-|------------|-------------|
-| Int8 | TINYINT |
-| Int16 | SMALLINT |
-| Int32 | INTEGER |
-| Int64 | BIGINT |
-| Float32 | FLOAT |
-| Float64 | DOUBLE |
-| Utf8 | VARCHAR |
-| Binary | BLOB |
-| Date32/64 | DATE |
-| Timestamp | TIMESTAMP |
-| List | VARCHAR (temp) |
-| Struct | VARCHAR (temp) |
+```
+├── src/
+│   ├── lib.rs           # Extension entry point
+│   ├── lance_scan.rs    # Lance scan table function
+│   ├── replacement_scan.rs # Replacement scan (future)
+│   └── types.rs         # Arrow to DuckDB type mapping
+├── test/
+│   ├── sql/            # SQL test files
+│   └── data/           # Test data
+└── examples/           # Usage examples
+```
 
-### Optimizations
+### Running Tests
 
-- **Projection Pushdown**: Reduces I/O by reading only required columns
-- **Predicate Pushdown**: Filters data at Lance level
-- **Fragment Pruning**: Skips irrelevant data fragments
-- **Batch Reading**: Configurable batch sizes for memory efficiency
+```bash
+# Run all tests (builds release and runs SQL tests)
+make test
+
+# Run debug tests
+make test_debug
+
+# Run quick smoke test
+make test_quick
+
+# Run Rust tests
+cargo test
+```
+
+### Running Clippy
+
+```bash
+cargo clippy --all-targets --all-features
+```
 
 ## Roadmap
 
-### Phase 1 (MVP) ✅
-- [x] Basic lance_scan table function
-- [x] Replacement scan for .lance files
-- [x] S3 support through Lance
-- [x] Basic type mapping
-- [x] Projection pushdown
-
-### Phase 2 (In Progress)
-- [ ] Complete predicate pushdown
-- [ ] Fragment-level parallelism
-- [ ] Complex type support (List, Struct, Map)
-- [ ] Statistics integration
-
-### Phase 3 (Future)
-- [ ] Zero-copy Arrow integration
+- [x] Basic `lance_scan` table function
+- [x] Arrow to DuckDB type mapping
+- [x] MVP with demo data
+- [ ] Full Lance dataset reading
+- [ ] Predicate pushdown
+- [ ] Projection pushdown
+- [ ] Replacement scan for `.lance` files
 - [ ] Write support (COPY TO)
-- [ ] Vector index utilization
-- [ ] Distributed query support
-
-## Testing
-
-```bash
-# Create test data
-python examples/create_test_data.py
-
-# Run DuckDB tests
-make test
-
-# Manual testing
-duckdb -c "LOAD 'build/release/lance_duckdb.duckdb_extension'; SELECT * FROM 'test/data/sample.lance' LIMIT 5;"
-```
-
-## Performance
-
-Benchmarks (preliminary):
-
-| Dataset Size | Lance Scan | Parquet Scan | Speedup |
-|-------------|------------|--------------|---------|
-| 1GB | 1.2s | 1.5s | 1.25x |
-| 10GB | 8.5s | 11.2s | 1.32x |
-| 100GB | 82s | 115s | 1.40x |
-
-*Note: Performance varies based on query patterns and data characteristics*
+- [ ] Vector index support
 
 ## Contributing
 
-Contributions welcome! Please check the issues for areas needing help.
+Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
 Apache 2.0
+
+## Acknowledgments
+
+Built on top of:
+- [Lance](https://github.com/lancedb/lance) - Modern columnar data format
+- [DuckDB](https://duckdb.org) - In-process analytical database
+- [Apache Arrow](https://arrow.apache.org) - Columnar memory format

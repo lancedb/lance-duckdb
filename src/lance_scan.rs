@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::anyhow;
 use arrow_array::{RecordBatch, StringArray, Int64Array, Float64Array};
 use arrow_schema::{Schema as ArrowSchema, Field, DataType};
 use duckdb::{
@@ -123,7 +123,7 @@ impl VTab for LanceScanVTab {
                 // Simple string conversion for all types (MVP)
                 for i in 0..rows_to_output {
                     let actual_row = *row_idx + i;
-                    let value = format!("row_{}_col_{}", actual_row, col_idx);
+                    let value = format!("row_{actual_row}_col_{col_idx}");
                     let c_value = CString::new(value)?;
                     vector.insert(i, c_value);
                 }
@@ -151,7 +151,7 @@ impl VTab for LanceScanVTab {
     }
 }
 
-pub fn register_lance_scan(con: &Connection) -> Result<()> {
+pub fn register_lance_scan(con: &Connection) -> anyhow::Result<()> {
     con.register_table_function::<LanceScanVTab>("lance_scan")
         .map_err(|e| anyhow!("Failed to register lance_scan: {}", e))?;
     Ok(())

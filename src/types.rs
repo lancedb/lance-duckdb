@@ -1,9 +1,9 @@
-use anyhow::{anyhow, Result};
+use anyhow::anyhow;
 use arrow_schema::DataType;
 use duckdb::core::{LogicalTypeHandle, LogicalTypeId};
 
 /// Convert Arrow DataType to DuckDB LogicalType
-pub fn arrow_to_duckdb_type(arrow_type: &DataType) -> Result<LogicalTypeHandle> {
+pub fn arrow_to_duckdb_type(arrow_type: &DataType) -> anyhow::Result<LogicalTypeHandle> {
     let logical_type = match arrow_type {
         // Numeric types
         DataType::Boolean => LogicalTypeHandle::from(LogicalTypeId::Boolean),

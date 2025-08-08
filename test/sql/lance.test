@@ -1,0 +1,38 @@
+# name: test/sql/lance.test
+# description: Test lance extension
+# group: [lance]
+
+# Before we load the extension, this will fail
+statement error
+SELECT * FROM lance_scan('test.lance');
+----
+Catalog Error: Table Function with name lance_scan does not exist!
+
+# Require statement will ensure the extension is loaded
+require lance
+
+# Verify extension is loaded
+query I
+SELECT COUNT(*) FROM duckdb_functions() WHERE function_name = 'lance_scan';
+----
+1
+
+# Test basic lance_scan function returns data
+statement ok
+SELECT * FROM lance_scan('test.lance') LIMIT 3;
+
+# Test count
+query I
+SELECT COUNT(*) FROM lance_scan('test.lance');
+----
+5
+
+# Test projection works
+statement ok
+SELECT id, name FROM lance_scan('test.lance') LIMIT 2;
+
+# Test that function exists and returns some data
+query I
+SELECT COUNT(*) > 0 FROM lance_scan('test.lance');
+----
+true

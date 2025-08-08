@@ -1,4 +1,3 @@
-use anyhow::Result;
 use duckdb::Connection;
 
 /// Register replacement scan for .lance files
@@ -8,7 +7,7 @@ use duckdb::Connection;
 /// fully exposed in duckdb-rs yet.
 /// 
 /// For now, users need to use lance_scan() function directly.
-pub fn register_replacement_scan(_con: &Connection) -> Result<()> {
+pub fn register_replacement_scan(_con: &Connection) -> anyhow::Result<()> {
     // TODO: Implement replacement scan when duckdb-rs exposes the necessary APIs
     // Currently, duckdb-rs doesn't expose duckdb_add_replacement_scan
     // We would need to:
