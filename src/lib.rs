@@ -2,6 +2,10 @@ extern crate duckdb;
 extern crate duckdb_loadable_macros;
 extern crate libduckdb_sys;
 
+mod lance_scan;
+mod replacement_scan;
+mod types;
+
 use duckdb::{
     core::{DataChunkHandle, Inserter, LogicalTypeHandle, LogicalTypeId},
     vtab::{BindInfo, InitInfo, TableFunctionInfo, VTab},
@@ -15,6 +19,7 @@ use std::{
     sync::atomic::{AtomicBool, Ordering},
 };
 
+// Keep the original HelloVTab for testing
 #[repr(C)]
 struct HelloBindData {
     name: String,
@@ -43,7 +48,10 @@ impl VTab for HelloVTab {
         })
     }
 
-    fn func(func: &TableFunctionInfo<Self>, output: &mut DataChunkHandle) -> Result<(), Box<dyn std::error::Error>> {
+    fn func(
+        func: &TableFunctionInfo<Self>,
+        output: &mut DataChunkHandle,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let init_data = func.get_init_data();
         let bind_data = func.get_bind_data();
         if init_data.done.swap(true, Ordering::Relaxed) {
@@ -62,11 +70,19 @@ impl VTab for HelloVTab {
     }
 }
 
-const EXTENSION_NAME: &str = env!("CARGO_PKG_NAME");
+const EXTENSION_NAME: &str = "lance";
 
 #[duckdb_entrypoint_c_api()]
 pub unsafe fn extension_entrypoint(con: Connection) -> Result<(), Box<dyn Error>> {
-    con.register_table_function::<HelloVTab>(EXTENSION_NAME)
+    // Register the hello function for testing
+    con.register_table_function::<HelloVTab>("hello_lance")
         .expect("Failed to register hello table function");
+
+    // Register lance_scan table function
+    lance_scan::register_lance_scan(&con).expect("Failed to register lance_scan table function");
+
+    // Register replacement scan for .lance files
+    replacement_scan::register_replacement_scan(&con).expect("Failed to register replacement scan");
+
     Ok(())
 }

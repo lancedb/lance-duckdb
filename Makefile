@@ -2,7 +2,7 @@
 
 PROJ_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 
-EXTENSION_NAME=lance_duckdb
+EXTENSION_NAME=lance
 
 # Set to 1 to enable Unstable API (binaries will only work on TARGET_DUCKDB_VERSION, forwards compatibility will be broken)
 # Note: currently extension-template-rs requires this, as duckdb-rs relies on unstable C API functionality

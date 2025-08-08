@@ -1,5 +1,5 @@
 [package]
-name = "lance-duckdb"
+name = "lance_duckdb"
 version = "0.1.0"
 edition = "2021"
 
@@ -10,16 +10,18 @@ crate-type = ["cdylib"]
 lto = true
 strip = true
 
-[[example]]
-# crate-type can't be (at the moment) be overriden for specific targets
-# src/wasm_lib.rs forwards to src/lib.rs so that we can change from cdylib
-# (that is needed while compiling natively) to staticlib (needed since the
-# actual linking will be done via emcc
-name = "lance-duckdb"
-path = "src/wasm_lib.rs"
-crate-type = ["staticlib"]
 
 [dependencies]
 duckdb = { version = "1.3.2", features = ["vtab-loadable"] }
 duckdb-loadable-macros = "0.1.9"
 libduckdb-sys = { version = "1.3.2", features = ["loadable-extension"] }
+
+# Lance and Arrow dependencies - using compatible versions
+lance = "0.32.1"
+arrow = "55.1"
+arrow-array = "55.1"
+arrow-schema = "55.1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+futures = "0.3"
+anyhow = "1.0"
+async-trait = "0.1"
