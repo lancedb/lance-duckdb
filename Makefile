@@ -18,20 +18,23 @@ all: configure debug
 # Include makefiles from DuckDB
 include extension-ci-tools/makefiles/c_api_extensions/base.Makefile
 
-# Override the library filename since our Rust crate name differs from extension name
+include extension-ci-tools/makefiles/c_api_extensions/rust.Makefile
+
+# Override RUST_LIBNAME after including rust.Makefile since our crate name differs from extension name
 ifeq ($(OS),Windows_NT)
+	RUST_LIBNAME=$(RUST_CRATE_NAME).dll
 	EXTENSION_LIB_FILENAME=$(RUST_CRATE_NAME).dll
 else
     UNAME_S := $(shell uname -s)
     ifeq ($(UNAME_S),Linux)
+        RUST_LIBNAME=lib$(RUST_CRATE_NAME).so
         EXTENSION_LIB_FILENAME=lib$(RUST_CRATE_NAME).so
     endif
     ifeq ($(UNAME_S),Darwin)
+        RUST_LIBNAME=lib$(RUST_CRATE_NAME).dylib
         EXTENSION_LIB_FILENAME=lib$(RUST_CRATE_NAME).dylib
     endif
 endif
-
-include extension-ci-tools/makefiles/c_api_extensions/rust.Makefile
 
 configure: venv platform extension_version
 
