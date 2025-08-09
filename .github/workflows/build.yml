@@ -66,7 +66,6 @@ jobs:
       - name: Configure extension tools (Unix)
         if: runner.os != 'Windows'
         run: |
-          git submodule update --init --recursive
           make configure
 
       - name: Run tests (Unix)
@@ -87,7 +86,6 @@ jobs:
         if: runner.os == 'Windows'
         shell: msys2 {0}
         run: |
-          git submodule update --init --recursive
           make configure
 
       - name: Run tests (Windows)
