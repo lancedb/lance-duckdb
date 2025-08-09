@@ -62,34 +62,10 @@ jobs:
         run: |
           python -m pip install duckdb==1.1.3
 
-      # Unix-like systems (Linux, macOS)
-      - name: Configure extension tools (Unix)
-        if: runner.os != 'Windows'
+      - name: Configure extension tools
         run: |
           make configure
 
       - name: Run tests (Unix)
-        if: runner.os != 'Windows'
-        run: |
-          make test
-
-      # Windows specific steps
-      - name: Setup MSYS2 (Windows)
-        if: runner.os == 'Windows'
-        uses: msys2/setup-msys2@v2
-        with:
-          msystem: MINGW64
-          update: true
-          install: make mingw-w64-x86_64-toolchain
-
-      - name: Configure extension tools (Windows)
-        if: runner.os == 'Windows'
-        shell: msys2 {0}
-        run: |
-          make configure
-
-      - name: Run tests (Windows)
-        if: runner.os == 'Windows'
-        shell: msys2 {0}
         run: |
           make test
