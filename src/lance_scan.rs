@@ -141,7 +141,7 @@ impl VTab for LanceScanVTab {
                         use arrow_array::cast::AsArray;
                         let array = column.as_primitive::<arrow_array::types::Int64Type>();
                         let data_ptr = vector.as_mut_ptr::<i64>();
-                        
+
                         for i in 0..rows_to_output {
                             let actual_row = *row_idx + i;
                             if column.is_null(actual_row) {
@@ -157,7 +157,7 @@ impl VTab for LanceScanVTab {
                         use arrow_array::cast::AsArray;
                         let array = column.as_primitive::<arrow_array::types::Float64Type>();
                         let data_ptr = vector.as_mut_ptr::<f64>();
-                        
+
                         for i in 0..rows_to_output {
                             let actual_row = *row_idx + i;
                             if column.is_null(actual_row) {
@@ -172,7 +172,7 @@ impl VTab for LanceScanVTab {
                     arrow_schema::DataType::Utf8 => {
                         use arrow_array::cast::AsArray;
                         let array = column.as_string::<i32>();
-                        
+
                         for i in 0..rows_to_output {
                             let actual_row = *row_idx + i;
                             if column.is_null(actual_row) {
