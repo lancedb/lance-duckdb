@@ -1,4 +1,4 @@
-name: Main Extension Distribution Pipeline
+name: CI
 on:
   push:
     branches: [main]
