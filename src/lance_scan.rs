@@ -1,15 +1,17 @@
 use anyhow::anyhow;
-use arrow_array::{RecordBatch, StringArray, Int64Array, Float64Array};
-use arrow_schema::{Schema as ArrowSchema, Field, DataType};
+use arrow_array::RecordBatch;
+use arrow_schema::{self, Schema as ArrowSchema};
 use duckdb::{
     core::{DataChunkHandle, Inserter, LogicalTypeHandle, LogicalTypeId},
     vtab::{BindInfo, InitInfo, TableFunctionInfo, VTab},
     Connection,
 };
+use lance::Dataset;
 use std::{
     ffi::CString,
     sync::{Arc, Mutex},
 };
+use tokio::runtime::Runtime;
 
 use crate::types::arrow_to_duckdb_type;
 
@@ -22,6 +24,8 @@ pub struct LanceScanBindData {
 
 #[repr(C)]
 pub struct LanceScanInitData {
+    path: String,
+    runtime: Arc<Runtime>,
     batches: Arc<Mutex<Vec<RecordBatch>>>,
     current_batch_idx: Arc<Mutex<usize>>,
     current_row_idx: Arc<Mutex<usize>>,
@@ -44,51 +48,61 @@ impl VTab for LanceScanVTab {
             8192 // Default batch size
         };
 
-        // For MVP, create a demo schema
-        // TODO: In production, open Lance dataset and get actual schema
-        let schema = Arc::new(ArrowSchema::new(vec![
-            Field::new("id", DataType::Int64, false),
-            Field::new("name", DataType::Utf8, false),
-            Field::new("value", DataType::Float64, false),
-        ]));
+        // Open the Lance dataset to get schema
+        let runtime = Runtime::new()?;
+        let dataset = runtime.block_on(async {
+            Dataset::open(&path).await
+        })?;
+        
+        // Get the Arrow schema from Lance dataset
+        let lance_schema = dataset.schema();
+        // Convert Lance schema to Arrow schema
+        let arrow_schema: ArrowSchema = lance_schema.into();
+        let arrow_schema = Arc::new(arrow_schema);
         
         // Register output columns in DuckDB
-        for field in schema.fields() {
+        for field in arrow_schema.fields() {
             let logical_type = arrow_to_duckdb_type(field.data_type())?;
             bind.add_result_column(field.name(), logical_type);
         }
         
         Ok(LanceScanBindData {
             path,
-            schema,
+            schema: arrow_schema,
             batch_size,
         })
     }
 
-    fn init(_init: &InitInfo) -> Result<Self::InitData, Box<dyn std::error::Error>> {
-        // Create demo data
-        // TODO: In production, read actual Lance data
-        let schema = Arc::new(ArrowSchema::new(vec![
-            Field::new("id", DataType::Int64, false),
-            Field::new("name", DataType::Utf8, false),
-            Field::new("value", DataType::Float64, false),
-        ]));
+    fn init(init: &InitInfo) -> Result<Self::InitData, Box<dyn std::error::Error>> {
+        let bind_data: *const LanceScanBindData = init.get_bind_data();
+        let path = unsafe { (*bind_data).path.clone() };
         
-        let id_array = Int64Array::from(vec![1, 2, 3, 4, 5]);
-        let name_array = StringArray::from(vec!["Alice", "Bob", "Charlie", "David", "Eve"]);
-        let value_array = Float64Array::from(vec![1.1, 2.2, 3.3, 4.4, 5.5]);
+        // Create a new runtime for this scan
+        let runtime = Arc::new(Runtime::new()?);
         
-        let batch = RecordBatch::try_new(
-            schema,
-            vec![
-                Arc::new(id_array),
-                Arc::new(name_array),
-                Arc::new(value_array),
-            ],
-        )?;
+        // Read all batches from the dataset
+        let batches = runtime.block_on(async {
+            let dataset = Dataset::open(&path).await?;
+            let scanner = dataset.scan().try_into_stream().await?;
+            
+            use futures::StreamExt;
+            let mut scanner = Box::pin(scanner);
+            let mut batches = Vec::new();
+            
+            while let Some(batch_result) = scanner.next().await {
+                match batch_result {
+                    Ok(batch) => batches.push(batch),
+                    Err(e) => return Err(e.into()),
+                }
+            }
+            
+            Ok::<Vec<RecordBatch>, Box<dyn std::error::Error>>(batches)
+        })?;
         
         Ok(LanceScanInitData {
-            batches: Arc::new(Mutex::new(vec![batch])),
+            path,
+            runtime,
+            batches: Arc::new(Mutex::new(batches)),
             current_batch_idx: Arc::new(Mutex::new(0)),
             current_row_idx: Arc::new(Mutex::new(0)),
         })
@@ -117,14 +131,40 @@ impl VTab for LanceScanVTab {
         // Output data
         if rows_to_output > 0 {
             // For each column, copy data to DuckDB vectors
-            for (col_idx, _column) in current_batch.columns().iter().enumerate() {
+            for (col_idx, column) in current_batch.columns().iter().enumerate() {
                 let vector = output.flat_vector(col_idx);
                 
-                // Simple string conversion for all types (MVP)
+                // Convert Arrow data to DuckDB format
+                // For MVP, convert everything to string
                 for i in 0..rows_to_output {
                     let actual_row = *row_idx + i;
-                    let value = format!("row_{actual_row}_col_{col_idx}");
-                    let c_value = CString::new(value)?;
+                    
+                    // Get string representation of the value
+                    let value_str = if column.is_null(actual_row) {
+                        String::new()
+                    } else {
+                        // Simplified conversion - in production handle each type properly
+                        match column.data_type() {
+                            arrow_schema::DataType::Int64 => {
+                                use arrow_array::cast::AsArray;
+                                let array = column.as_primitive::<arrow_array::types::Int64Type>();
+                                array.value(actual_row).to_string()
+                            },
+                            arrow_schema::DataType::Float64 => {
+                                use arrow_array::cast::AsArray;
+                                let array = column.as_primitive::<arrow_array::types::Float64Type>();
+                                array.value(actual_row).to_string()
+                            },
+                            arrow_schema::DataType::Utf8 => {
+                                use arrow_array::cast::AsArray;
+                                let array = column.as_string::<i32>();
+                                array.value(actual_row).to_string()
+                            },
+                            _ => format!("unsupported_type")
+                        }
+                    };
+                    
+                    let c_value = CString::new(value_str)?;
                     vector.insert(i, c_value);
                 }
             }

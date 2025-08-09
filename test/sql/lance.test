@@ -1,14 +1,14 @@
 # name: test/sql/lance.test
-# description: Test lance extension
+# description: Test lance extension with real Lance dataset
 # group: [lance]
 
 # Before we load the extension, this will fail
 statement error
-SELECT * FROM lance_scan('test.lance');
+SELECT * FROM lance_scan('test/test_data.lance');
 ----
 Catalog Error: Table Function with name lance_scan does not exist!
 
-# Require statement will ensure the extension is loaded
+# Load the extension
 require lance
 
 # Verify extension is loaded
@@ -17,22 +17,86 @@ SELECT COUNT(*) FROM duckdb_functions() WHERE function_name = 'lance_scan';
 ----
 1
 
-# Test basic lance_scan function returns data
-statement ok
-SELECT * FROM lance_scan('test.lance') LIMIT 3;
+# Test reading all data
+query IITI
+SELECT * FROM lance_scan('test/test_data.lance') ORDER BY id;
+----
+1	Alice	25	85.5
+2	Bob	30	92.0
+3	Charlie	35	78.5
+4	David	40	88.0
+5	Eve	45	95.5
 
 # Test count
 query I
-SELECT COUNT(*) FROM lance_scan('test.lance');
+SELECT COUNT(*) FROM lance_scan('test/test_data.lance');
 ----
 5
 
-# Test projection works
-statement ok
-SELECT id, name FROM lance_scan('test.lance') LIMIT 2;
-
-# Test that function exists and returns some data
-query I
-SELECT COUNT(*) > 0 FROM lance_scan('test.lance');
+# Test projection - select specific columns
+query IT
+SELECT id, name FROM lance_scan('test/test_data.lance') ORDER BY id;
 ----
-true
+1	Alice
+2	Bob
+3	Charlie
+4	David
+5	Eve
+
+# Test filtering
+query IT
+SELECT name, age FROM lance_scan('test/test_data.lance') WHERE age >= 35 ORDER BY age;
+----
+Charlie	35
+David	40
+Eve	45
+
+# Test aggregations - AVG
+query R
+SELECT AVG(score) FROM lance_scan('test/test_data.lance');
+----
+87.9
+
+# Test aggregations - MIN/MAX
+query RR
+SELECT MIN(score), MAX(score) FROM lance_scan('test/test_data.lance');
+----
+78.5	95.5
+
+# Test aggregations - SUM
+query R
+SELECT SUM(score) FROM lance_scan('test/test_data.lance');
+----
+439.5
+
+# Test GROUP BY
+query TR
+SELECT name, score FROM lance_scan('test/test_data.lance') WHERE score > 85 ORDER BY score DESC;
+----
+Eve	95.5
+Bob	92.0
+David	88.0
+Alice	85.5
+
+# Test LIMIT
+query I
+SELECT id FROM lance_scan('test/test_data.lance') ORDER BY id LIMIT 3;
+----
+1
+2
+3
+
+# Test ORDER BY different columns
+query TI
+SELECT name, age FROM lance_scan('test/test_data.lance') ORDER BY age DESC LIMIT 2;
+----
+Eve	45
+David	40
+
+# Test combined conditions
+query IT
+SELECT id, name FROM lance_scan('test/test_data.lance') WHERE age > 30 AND score > 85 ORDER BY id;
+----
+2	Bob
+4	David
+5	Eve

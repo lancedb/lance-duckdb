@@ -13,12 +13,12 @@ mod types;
 ///
 /// This function is called by DuckDB's C API when loading the extension.
 /// The caller must ensure that the connection is valid and properly initialized.
-#[duckdb_entrypoint_c_api()]
+#[duckdb_entrypoint_c_api(ext_name = "lance")]
 pub unsafe fn extension_entrypoint(con: Connection) -> Result<(), Box<dyn Error>> {
     // Register lance_scan table function
     lance_scan::register_lance_scan(&con)?;
     
-    // Register replacement scan for .lance files
+    // Register replacement scan (placeholder for now)
     replacement_scan::register_replacement_scan(&con)?;
     
     Ok(())

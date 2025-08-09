@@ -2,23 +2,17 @@ use duckdb::Connection;
 
 /// Register replacement scan for .lance files
 /// 
-/// This is a placeholder implementation. Full replacement scan
-/// requires deeper integration with DuckDB's C API that is not
-/// fully exposed in duckdb-rs yet.
+/// Note: Full replacement scan requires direct access to database handle
+/// which is not fully exposed in duckdb-rs yet. This is a placeholder
+/// that will be implemented when the API is available.
 /// 
-/// For now, users need to use lance_scan() function directly.
+/// For now, users can use:
+/// SELECT * FROM lance_scan('path/to/file.lance')
+/// 
+/// In the future, this will enable:
+/// SELECT * FROM 'path/to/file.lance'
 pub fn register_replacement_scan(_con: &Connection) -> anyhow::Result<()> {
-    // TODO: Implement replacement scan when duckdb-rs exposes the necessary APIs
-    // Currently, duckdb-rs doesn't expose duckdb_add_replacement_scan
-    // We would need to:
-    // 1. Create a callback that checks if table name ends with .lance
-    // 2. Replace the scan with lance_scan(path)
-    // 3. Register the callback with DuckDB
-    
-    // For now, users can use:
-    // SELECT * FROM lance_scan('path/to/file.lance')
-    // Instead of:
-    // SELECT * FROM 'path/to/file.lance'
-    
+    // TODO: Implement when duckdb-rs exposes database handle or
+    // provides a way to register replacement scans
     Ok(())
 }

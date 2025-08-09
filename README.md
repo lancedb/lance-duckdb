@@ -78,10 +78,9 @@ LIMIT 100;
 │   ├── lance_scan.rs    # Lance scan table function
 │   ├── replacement_scan.rs # Replacement scan (future)
 │   └── types.rs         # Arrow to DuckDB type mapping
-├── test/
-│   ├── sql/            # SQL test files
-│   └── data/           # Test data
-└── examples/           # Usage examples
+└── test/
+    ├── sql/            # SQL test files
+    └── test_data.lance/ # Test Lance dataset
 ```
 
 ### Running Tests
@@ -110,11 +109,11 @@ cargo clippy --all-targets --all-features
 
 - [x] Basic `lance_scan` table function
 - [x] Arrow to DuckDB type mapping
-- [x] MVP with demo data
-- [ ] Full Lance dataset reading
+- [x] Full Lance dataset reading
 - [ ] Predicate pushdown
 - [ ] Projection pushdown
-- [ ] Replacement scan for `.lance` files
+- [ ] Replacement scan for `.lance` files (requires duckdb-rs API enhancement)
+- [ ] Streaming reads for large datasets
 - [ ] Write support (COPY TO)
 - [ ] Vector index support
 

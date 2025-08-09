@@ -63,16 +63,17 @@ See `test/sql/lance.test` for examples.
 ### Working
 - ✅ Basic table function `lance_scan(path)`
 - ✅ Arrow to DuckDB type mapping
-- ✅ Demo data generation for testing
+- ✅ Actual Lance dataset reading
 - ✅ Extension loading and registration
+- ✅ Basic data type conversion (Int64, Float64, Utf8)
 
 ### TODO
-- [ ] Actual Lance dataset reading (currently uses mock data)
 - [ ] S3/cloud storage support (Lance supports it natively)
 - [ ] Predicate pushdown
 - [ ] Projection pushdown
-- [ ] Replacement scan for automatic `.lance` file handling
-- [ ] Proper Arrow data copying (currently all converted to strings)
+- [ ] Replacement scan for automatic `.lance` file handling (requires duckdb-rs API enhancement)
+- [ ] Proper Arrow data copying for all types (currently simplified conversion)
+- [ ] Streaming reads instead of loading all data at once
 
 ## Code Style
 
