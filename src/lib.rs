@@ -17,9 +17,9 @@ mod types;
 pub unsafe fn extension_entrypoint(con: Connection) -> Result<(), Box<dyn Error>> {
     // Register lance_scan table function
     lance_scan::register_lance_scan(&con)?;
-    
+
     // Register replacement scan (placeholder for now)
     replacement_scan::register_replacement_scan(&con)?;
-    
+
     Ok(())
 }
