@@ -19,3 +19,4 @@ jobs:
       extension_name: lance
       extra_toolchains: rust;python3
       exclude_archs: "wasm_mvp;wasm_eh;wasm_threads;linux_amd64_musl"
+      vcpkg_extra_dependencies: '{"linux_amd64": ["protobuf"], "linux_arm64": ["protobuf"], "osx_amd64": ["protobuf"], "osx_arm64": ["protobuf"], "windows_amd64": ["protobuf"], "windows_amd64_mingw": ["protobuf"]}'
