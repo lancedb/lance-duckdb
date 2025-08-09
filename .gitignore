@@ -12,6 +12,7 @@ duckdb_unittest_tempdir/
 __pycache__/
 *.py[cod]
 venv/
+.ropeproject/
 
 # IDE
 .idea/

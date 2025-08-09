@@ -1,99 +1,171 @@
-# Lance DuckDB Extension Development Notes
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project Overview
 
-This project implements a DuckDB extension that enables native querying of Lance format datasets directly from SQL. Lance is a modern columnar data format optimized for ML/AI workloads with native cloud storage support.
+This is a DuckDB extension written in Rust that enables native SQL querying of Lance format datasets. Lance is a modern columnar data format optimized for ML/AI workloads with native cloud storage support.
 
-## Key Development Decisions
+## Essential Commands
 
-### 1. Architecture Approach
+### Building
+```bash
+# Initial setup (only needed once)
+git submodule update --init --recursive
+make configure
 
-**Decision**: Use Lance library directly instead of reimplementing the format reader.
+# Build commands
+make release         # Production build → build/release/lance.duckdb_extension
+make debug          # Debug build → build/debug/lance.duckdb_extension
+make clean          # Clean build artifacts
+make clean_all      # Clean everything including configure
 
-**Rationale**:
-- Lance already handles S3/cloud storage natively
-- Avoids reimplementing complex format details
-- Focuses effort on DuckDB integration layer
-- Ensures compatibility with Lance ecosystem
+# Quick Rust checks (without full build)
+cargo check
+cargo clippy --all-targets --all-features
+```
 
-### 2. Extension Naming Strategy
+### Testing
+```bash
+# Run all tests (builds release and runs sqllogictest)
+make test
 
-**Decision**: Use different names for extension vs Rust package
-- Extension name: `lance` (what users see in DuckDB)
-- Rust package name: `lance_duckdb` (avoids crate name conflict)
+# Run with specific build
+make test_debug     # Test with debug build
+make test_release   # Test with release build
 
-**Implementation**:
+# Run DuckDB with extension for manual testing
+duckdb -unsigned -c "LOAD 'build/release/lance.duckdb_extension'; SELECT * FROM lance_scan('test/test_data.lance');"
+```
+
+### Development Iteration
+```bash
+# Fast iteration cycle
+cargo build --release && make test_release
+
+# Check for issues without full build
+cargo clippy --all-targets --all-features
+```
+
+## Architecture & Key Design Decisions
+
+### Extension Architecture
+
+The extension follows a three-layer architecture:
+
+1. **Entry Layer** (`src/lib.rs`)
+   - Defines `lance_init_c_api` entry point using `duckdb_entrypoint_c_api` macro
+   - Registers table functions with DuckDB
+
+2. **Table Function Layer** (`src/lance_scan.rs`)
+   - Implements `LanceScanVTab` using DuckDB's VTab trait
+   - `bind()`: Opens Lance dataset, extracts schema, registers output columns
+   - `init()`: Loads all data batches into memory (current implementation)
+   - `func()`: Serves data from memory to DuckDB
+
+3. **Type Mapping Layer** (`src/types.rs`)
+   - Maps Arrow types to DuckDB logical types
+   - Currently simplified: converts most types to strings for MVP
+
+### Critical Implementation Details
+
+#### Naming Strategy
+The extension uses different names to avoid conflicts:
+- **Extension name**: `lance` (what users see)
+- **Rust crate name**: `lance_duckdb` (avoids crate conflict)
+- **Entry point**: `lance_init_c_api` (generated from extension name)
+
+This is controlled in `Makefile`:
 ```makefile
 EXTENSION_NAME=lance
 RUST_CRATE_NAME=lance_duckdb
 ```
 
-**Rationale**: Provides clean user experience while avoiding naming conflicts in Rust ecosystem.
+#### Async Bridge Pattern
+Lance uses async APIs while DuckDB extensions are synchronous:
+```rust
+// Create runtime in init
+let runtime = Arc::new(Runtime::new()?);
 
-## Testing Strategy
-
-### Test Data Setup
-- Created small test dataset: `test/test_data.lance`
-- 5 records with id, name, age, score columns
-- Covers basic data types: Int64, Utf8, Float64
-
-### Test Coverage
-1. Extension loading verification
-2. Basic data reading
-3. Projections and filters
-4. Aggregations (COUNT, AVG, MIN, MAX, SUM)
-5. Sorting and limits
-6. Combined predicates
-
-### Test Framework
-- Using DuckDB's sqllogictest format
-- All tests in `test/sql/` directory
-- Run with `make test`
-
-## Dependencies Version Locking
-
-**Critical**: Arrow version must match between Lance and DuckDB bindings.
-- Lance 0.32.1 requires Arrow 55.1
-- Must use exact versions, no ranges
-
-## Build Configuration
-
-### Key Makefile Variables
-- `USE_UNSTABLE_C_API=1`: Required for duckdb-rs
-- `TARGET_DUCKDB_VERSION=v1.3.2`: Tested DuckDB version
-
-### Entry Point Naming
-- Macro generates: `lance_init_c_api` (not `lance_duckdb_init_c_api`)
-- Controlled by `ext_name = "lance"` attribute
-
-## Lessons Learned
-
-1. **Start Simple**: Mock data → Real Lance reading was correct progression
-2. **Type Systems Matter**: Arrow/DuckDB type mapping is complex, string conversion works for MVP
-3. **API Limitations**: Some features blocked by binding limitations, document and move on
-4. **Test Early**: sqllogictest format excellent for SQL extension testing
-5. **Version Alignment**: Dependency version conflicts are painful, lock versions early
-
-## Development Commands
-
-```bash
-# Build
-make clean && make release
-
-# Test
-make test
-
-# Quick iteration
-cargo check
-cargo clippy --all-targets --all-features
-
-# Create test data
-cargo run --example create_test_data
+// Block on async operations
+let dataset = runtime.block_on(async {
+    Dataset::open(&path).await
+})?;
 ```
 
-## References
+#### Current Data Loading Strategy
+**Important**: Currently loads ALL data into memory during `init()`:
+```rust
+// In LanceScanInitData
+batches: Arc<Mutex<Vec<RecordBatch>>>,  // All data loaded here
+```
 
-- [Lance Format](https://github.com/lancedb/lance)
-- [DuckDB Extension API](https://duckdb.org/docs/api/c/extension)
-- [Arrow Columnar Format](https://arrow.apache.org/docs/format/Columnar.html)
-- [duckdb-rs](https://github.com/duckdb/duckdb-rs)
+This works for small-medium datasets but needs streaming for production.
+
+### Dependency Version Constraints
+
+**Critical**: Arrow versions MUST match exactly between Lance and DuckDB:
+- Lance 0.32.1 → Arrow 55.1
+- No version ranges allowed (use exact versions)
+
+### Known Limitations
+
+1. **Replacement Scan**: Not implemented due to `duckdb-rs` API limitations
+   - Users must use `lance_scan('file.lance')` instead of `FROM 'file.lance'`
+   - Requires access to raw database handle not exposed by duckdb-rs
+
+2. **Type Conversion**: Currently simplified to strings
+   - Production needs direct Arrow→DuckDB memory mapping
+
+3. **Memory Usage**: Loads entire dataset into memory
+   - Needs streaming implementation for large datasets
+
+## Test Data & Testing
+
+### Test Dataset
+Location: `test/test_data.lance`
+- 5 records: id (1-5), name (Alice-Eve), age (25-45), score (78.5-95.5)
+- Created by: `cargo run --example create_test_data`
+
+### Test Format
+Uses DuckDB's sqllogictest format in `test/sql/`:
+- `statement ok/error`: Test statement execution
+- `query <types>`: Test query with expected results (I=int, T=text, R=real)
+- `require lance`: Load the extension
+
+## Common Issues & Solutions
+
+### Build Failures
+1. **Cargo hangs**: Kill with `pkill -9 cargo rustc`, then `make clean`
+2. **Version mismatch**: Check `TARGET_DUCKDB_VERSION=v1.3.2` in Makefile
+3. **Missing symbols**: Ensure `USE_UNSTABLE_C_API=1` is set
+
+### Extension Loading
+```sql
+-- Always use -unsigned flag for local builds
+duckdb -unsigned
+LOAD 'build/release/lance.duckdb_extension';
+```
+
+### Type Errors
+Current implementation converts to strings. If seeing type mismatches, check:
+1. Arrow schema extraction in `bind()`
+2. Type mapping in `types.rs`
+3. Data conversion in `func()`
+
+## Future Improvements Priority
+
+1. **High Priority**
+   - Streaming reads (replace Vec<RecordBatch> with iterator)
+   - Proper Arrow→DuckDB type mapping
+   - Predicate pushdown to Lance
+
+2. **Medium Priority**
+   - Replacement scan when API available
+   - Projection pushdown
+   - Better error messages
+
+3. **Low Priority**
+   - Write support (COPY TO)
+   - Vector index integration
+   - Statistics for query optimization
