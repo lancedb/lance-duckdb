@@ -1,4 +1,5 @@
 name: CI
+
 on:
   push:
     branches: [main]
@@ -10,13 +11,87 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  duckdb-stable-build:
-    name: Build
-    uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@v1.3.2
-    with:
-      duckdb_version: v1.3.2
-      ci_tools_version: v1.3.2
-      extension_name: lance
-      extra_toolchains: rust;python3
-      exclude_archs: "wasm_mvp;wasm_eh;wasm_threads;linux_amd64_musl"
-      vcpkg_extra_dependencies: '{"linux_amd64": ["protobuf"], "linux_arm64": ["protobuf"], "osx_amd64": ["protobuf"], "osx_arm64": ["protobuf"], "windows_amd64": ["protobuf"], "windows_amd64_mingw": ["protobuf"]}'
+  rust-check:
+    name: Rust checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check formatting
+        run: cargo fmt -- --check
+
+      - name: Run clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Run Rust tests
+        run: cargo test --all
+
+  test:
+    name: Test on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install DuckDB Python
+        run: |
+          python -m pip install duckdb==1.1.3
+
+      # Unix-like systems (Linux, macOS)
+      - name: Configure extension tools (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          git submodule update --init --recursive
+          make configure
+
+      - name: Run tests (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          make test
+
+      # Windows specific steps
+      - name: Setup MSYS2 (Windows)
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: make mingw-w64-x86_64-toolchain
+
+      - name: Configure extension tools (Windows)
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: |
+          git submodule update --init --recursive
+          make configure
+
+      - name: Run tests (Windows)
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: |
+          make test
