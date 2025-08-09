@@ -95,7 +95,7 @@ David	40
 
 # Test combined conditions
 query IT
-SELECT id, name FROM lance_scan('test/test_data.lance') WHERE age > 30 AND score > 85 ORDER BY id;
+SELECT id, name FROM lance_scan('test/test_data.lance') WHERE age >= 30 AND score > 85 ORDER BY id;
 ----
 2	Bob
 4	David

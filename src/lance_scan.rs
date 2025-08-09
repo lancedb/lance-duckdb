@@ -133,41 +133,64 @@ impl VTab for LanceScanVTab {
         if rows_to_output > 0 {
             // For each column, copy data to DuckDB vectors
             for (col_idx, column) in current_batch.columns().iter().enumerate() {
-                let vector = output.flat_vector(col_idx);
+                let mut vector = output.flat_vector(col_idx);
 
                 // Convert Arrow data to DuckDB format
-                // For MVP, convert everything to string
-                for i in 0..rows_to_output {
-                    let actual_row = *row_idx + i;
-
-                    // Get string representation of the value
-                    let value_str = if column.is_null(actual_row) {
-                        String::new()
-                    } else {
-                        // Simplified conversion - in production handle each type properly
-                        match column.data_type() {
-                            arrow_schema::DataType::Int64 => {
-                                use arrow_array::cast::AsArray;
-                                let array = column.as_primitive::<arrow_array::types::Int64Type>();
-                                array.value(actual_row).to_string()
+                match column.data_type() {
+                    arrow_schema::DataType::Int64 => {
+                        use arrow_array::cast::AsArray;
+                        let array = column.as_primitive::<arrow_array::types::Int64Type>();
+                        let data_ptr = vector.as_mut_ptr::<i64>();
+                        
+                        for i in 0..rows_to_output {
+                            let actual_row = *row_idx + i;
+                            if column.is_null(actual_row) {
+                                vector.set_null(i);
+                            } else {
+                                unsafe {
+                                    *data_ptr.add(i) = array.value(actual_row);
+                                }
                             }
-                            arrow_schema::DataType::Float64 => {
-                                use arrow_array::cast::AsArray;
-                                let array =
-                                    column.as_primitive::<arrow_array::types::Float64Type>();
-                                array.value(actual_row).to_string()
-                            }
-                            arrow_schema::DataType::Utf8 => {
-                                use arrow_array::cast::AsArray;
-                                let array = column.as_string::<i32>();
-                                array.value(actual_row).to_string()
-                            }
-                            _ => "unsupported_type".to_string(),
                         }
-                    };
-
-                    let c_value = CString::new(value_str)?;
-                    vector.insert(i, c_value);
+                    }
+                    arrow_schema::DataType::Float64 => {
+                        use arrow_array::cast::AsArray;
+                        let array = column.as_primitive::<arrow_array::types::Float64Type>();
+                        let data_ptr = vector.as_mut_ptr::<f64>();
+                        
+                        for i in 0..rows_to_output {
+                            let actual_row = *row_idx + i;
+                            if column.is_null(actual_row) {
+                                vector.set_null(i);
+                            } else {
+                                unsafe {
+                                    *data_ptr.add(i) = array.value(actual_row);
+                                }
+                            }
+                        }
+                    }
+                    arrow_schema::DataType::Utf8 => {
+                        use arrow_array::cast::AsArray;
+                        let array = column.as_string::<i32>();
+                        
+                        for i in 0..rows_to_output {
+                            let actual_row = *row_idx + i;
+                            if column.is_null(actual_row) {
+                                vector.set_null(i);
+                            } else {
+                                let value = array.value(actual_row);
+                                let c_value = CString::new(value)?;
+                                vector.insert(i, c_value);
+                            }
+                        }
+                    }
+                    _ => {
+                        // For unsupported types, insert as string
+                        for i in 0..rows_to_output {
+                            let c_value = CString::new("unsupported_type")?;
+                            vector.insert(i, c_value);
+                        }
+                    }
                 }
             }
 
