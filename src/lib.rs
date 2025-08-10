@@ -51,7 +51,7 @@ pub unsafe extern "C" fn lance_init_c_api(
     let connection = match Connection::open_from_raw(db.cast()) {
         Ok(conn) => conn,
         Err(e) => {
-            let error_msg = CString::new(format!("Failed to create connection: {}", e)).unwrap();
+            let error_msg = CString::new(format!("Failed to create connection: {e}")).unwrap();
             if let Some(set_error) = (*access).set_error {
                 set_error(info, error_msg.as_ptr());
             }
@@ -61,7 +61,7 @@ pub unsafe extern "C" fn lance_init_c_api(
 
     // Register the lance_scan table function
     if let Err(e) = lance_scan::register_lance_scan(&connection) {
-        let error_msg = CString::new(format!("Failed to register lance_scan: {}", e)).unwrap();
+        let error_msg = CString::new(format!("Failed to register lance_scan: {e}")).unwrap();
         if let Some(set_error) = (*access).set_error {
             set_error(info, error_msg.as_ptr());
         }
@@ -70,8 +70,7 @@ pub unsafe extern "C" fn lance_init_c_api(
 
     // Register the replacement scan for .lance files
     if let Err(e) = replacement_scan::register_replacement_scan_internal(db) {
-        let error_msg =
-            CString::new(format!("Failed to register replacement scan: {}", e)).unwrap();
+        let error_msg = CString::new(format!("Failed to register replacement scan: {e}")).unwrap();
         if let Some(set_error) = (*access).set_error {
             set_error(info, error_msg.as_ptr());
         }
