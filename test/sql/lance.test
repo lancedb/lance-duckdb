@@ -17,6 +17,10 @@ SELECT COUNT(*) FROM duckdb_functions() WHERE function_name = 'lance_scan';
 ----
 1
 
+# ============================================
+# Test lance_scan table function
+# ============================================
+
 # Test reading all data
 query IITI
 SELECT * FROM lance_scan('test/test_data.lance') ORDER BY id;
@@ -100,3 +104,71 @@ SELECT id, name FROM lance_scan('test/test_data.lance') WHERE age >= 30 AND scor
 2	Bob
 4	David
 5	Eve
+
+# ============================================
+# Test replacement scan (direct FROM 'file.lance')
+# ============================================
+
+# Test 1: Basic replacement scan - direct query from .lance file
+query IITI
+SELECT * FROM 'test/test_data.lance' ORDER BY id
+----
+1	Alice	25	85.5
+2	Bob	30	92.0
+3	Charlie	35	78.5
+4	David	40	88.0
+5	Eve	45	95.5
+
+# Test 2: Replacement scan with WHERE clause
+query I
+SELECT id FROM 'test/test_data.lance' WHERE age > 35 ORDER BY id
+----
+4
+5
+
+# Test 3: Replacement scan with aggregation
+query I
+SELECT COUNT(*) FROM 'test/test_data.lance'
+----
+5
+
+# Test 4: Replacement scan with column selection
+query IT
+SELECT id, name FROM 'test/test_data.lance' WHERE score > 90.0 ORDER BY id
+----
+2	Bob
+5	Eve
+
+# Test 5: Replacement scan with JOIN
+# First create a temp table for join
+statement ok
+CREATE TABLE categories (id INTEGER, category VARCHAR);
+
+statement ok
+INSERT INTO categories VALUES (1, 'Junior'), (2, 'Senior'), (3, 'Senior'), (4, 'Senior'), (5, 'Manager');
+
+query ITT
+SELECT l.id, l.name, c.category 
+FROM 'test/test_data.lance' l 
+JOIN categories c ON l.id = c.id 
+ORDER BY l.id
+----
+1	Alice	Junior
+2	Bob	Senior
+3	Charlie	Senior
+4	David	Senior
+5	Eve	Manager
+
+# Clean up
+statement ok
+DROP TABLE categories;
+
+# Test 6: Verify both methods produce same results
+query I
+SELECT COUNT(*) FROM (
+    SELECT * FROM lance_scan('test/test_data.lance')
+    EXCEPT
+    SELECT * FROM 'test/test_data.lance'
+)
+----
+0
