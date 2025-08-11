@@ -1,61 +1,48 @@
-use anyhow::anyhow;
-use arrow_schema::DataType;
-use duckdb::core::{LogicalTypeHandle, LogicalTypeId};
+use arrow::datatypes::DataType;
 
-/// Convert Arrow DataType to DuckDB LogicalType
-pub fn arrow_to_duckdb_type(arrow_type: &DataType) -> anyhow::Result<LogicalTypeHandle> {
-    let logical_type = match arrow_type {
-        // Numeric types
-        DataType::Boolean => LogicalTypeHandle::from(LogicalTypeId::Boolean),
-        DataType::Int8 => LogicalTypeHandle::from(LogicalTypeId::Tinyint),
-        DataType::Int16 => LogicalTypeHandle::from(LogicalTypeId::Smallint),
-        DataType::Int32 => LogicalTypeHandle::from(LogicalTypeId::Integer),
-        DataType::Int64 => LogicalTypeHandle::from(LogicalTypeId::Bigint),
-        DataType::UInt8 => LogicalTypeHandle::from(LogicalTypeId::UTinyint),
-        DataType::UInt16 => LogicalTypeHandle::from(LogicalTypeId::USmallint),
-        DataType::UInt32 => LogicalTypeHandle::from(LogicalTypeId::UInteger),
-        DataType::UInt64 => LogicalTypeHandle::from(LogicalTypeId::UBigint),
-        DataType::Float32 => LogicalTypeHandle::from(LogicalTypeId::Float),
-        DataType::Float64 => LogicalTypeHandle::from(LogicalTypeId::Double),
+pub fn arrow_type_to_string(data_type: &DataType) -> String {
+    match data_type {
+        DataType::Boolean => "bool".to_string(),
+        DataType::Int8 => "int8".to_string(),
+        DataType::Int16 => "int16".to_string(),
+        DataType::Int32 => "int32".to_string(),
+        DataType::Int64 => "int64".to_string(),
+        DataType::UInt8 => "uint8".to_string(),
+        DataType::UInt16 => "uint16".to_string(),
+        DataType::UInt32 => "uint32".to_string(),
+        DataType::UInt64 => "uint64".to_string(),
+        DataType::Float32 => "float".to_string(),
+        DataType::Float64 => "double".to_string(),
+        DataType::Utf8 => "utf8".to_string(),
+        DataType::LargeUtf8 => "string".to_string(),
+        DataType::Binary => "binary".to_string(),
+        DataType::Date32 => "date32".to_string(),
+        DataType::Date64 => "date64".to_string(),
+        DataType::Timestamp(_, _) => "timestamp".to_string(),
+        DataType::Decimal128(_, _) => "decimal128".to_string(),
+        DataType::List(_) => "list".to_string(),
+        DataType::Struct(_) => "struct".to_string(),
+        _ => "unknown".to_string(),
+    }
+}
 
-        // String types
-        DataType::Utf8 | DataType::LargeUtf8 => LogicalTypeHandle::from(LogicalTypeId::Varchar),
-
-        // Binary types
-        DataType::Binary | DataType::LargeBinary => LogicalTypeHandle::from(LogicalTypeId::Blob),
-
-        // Date/Time types
-        DataType::Date32 | DataType::Date64 => LogicalTypeHandle::from(LogicalTypeId::Date),
-        DataType::Time32(_) | DataType::Time64(_) => LogicalTypeHandle::from(LogicalTypeId::Time),
-        DataType::Timestamp(_, _) => LogicalTypeHandle::from(LogicalTypeId::TimestampMs),
-
-        // Complex types - temporarily map to VARCHAR
-        DataType::List(_) | DataType::LargeList(_) | DataType::FixedSizeList(_, _) => {
-            // TODO: Implement proper list type mapping
-            LogicalTypeHandle::from(LogicalTypeId::Varchar)
-        }
-        DataType::Struct(_) => {
-            // TODO: Implement proper struct type mapping
-            LogicalTypeHandle::from(LogicalTypeId::Varchar)
-        }
-        DataType::Map(_, _) => {
-            // TODO: Implement proper map type mapping
-            LogicalTypeHandle::from(LogicalTypeId::Varchar)
-        }
-
-        // Decimal type
-        DataType::Decimal128(_precision, _scale) | DataType::Decimal256(_precision, _scale) => {
-            // TODO: Create decimal type with proper precision and scale
-            LogicalTypeHandle::from(LogicalTypeId::Double)
-        }
-
-        // Null type - map to VARCHAR for now
-        DataType::Null => LogicalTypeHandle::from(LogicalTypeId::Varchar),
-
-        _ => {
-            return Err(anyhow!("Unsupported Arrow type: {:?}", arrow_type));
-        }
-    };
-
-    Ok(logical_type)
+pub fn string_to_arrow_type(type_str: &str) -> DataType {
+    match type_str {
+        "bool" => DataType::Boolean,
+        "int8" => DataType::Int8,
+        "int16" => DataType::Int16,
+        "int32" => DataType::Int32,
+        "int64" => DataType::Int64,
+        "uint8" => DataType::UInt8,
+        "uint16" => DataType::UInt16,
+        "uint32" => DataType::UInt32,
+        "uint64" => DataType::UInt64,
+        "float" => DataType::Float32,
+        "double" => DataType::Float64,
+        "utf8" | "string" => DataType::Utf8,
+        "binary" => DataType::Binary,
+        "date32" => DataType::Date32,
+        "date64" => DataType::Date64,
+        _ => DataType::Utf8,  // Default to string
+    }
 }

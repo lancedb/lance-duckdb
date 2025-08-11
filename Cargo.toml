@@ -1,19 +1,17 @@
 [package]
-name = "lance_duckdb"
+name = "lance_duckdb_ffi"
 version = "0.1.0"
 edition = "2021"
 
 [lib]
-crate-type = ["cdylib"]
+name = "lance_duckdb_ffi"
+crate-type = ["staticlib"]
 
 [profile.release]
 lto = true
 strip = true
 
 [dependencies]
-duckdb = { version = "1.3.2", features = ["vtab-loadable"] }
-duckdb-loadable-macros = "0.1.9"
-libduckdb-sys = { version = "1.3.2", features = ["loadable-extension"] }
 
 # Lance and Arrow dependencies - using compatible versions
 lance = "0.32.1"
