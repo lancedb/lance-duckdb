@@ -2,9 +2,10 @@
 #include "duckdb/function/table_function.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/string_util.hpp"
+#include "duckdb/common/vector_operations/vector_operations.hpp"
+#include "duckdb/common/arrow/arrow.hpp"
 #include "duckdb/main/extension_util.hpp"
 #include "duckdb/parser/parsed_data/create_table_function_info.hpp"
-// Arrow integration headers would go here when available
 
 #include <memory>
 #include <mutex>
@@ -26,7 +27,11 @@ extern "C" {
     void* lance_read_batch(void* dataset);
     void lance_free_batch(void* batch);
     int64_t lance_batch_num_rows(void* batch);
-    void* lance_batch_to_arrow(void* batch);
+    
+    // Direct data access functions
+    int64_t lance_batch_get_int64_column(void* batch, int64_t col_idx, int64_t* out_data);
+    int64_t lance_batch_get_float64_column(void* batch, int64_t col_idx, double* out_data);
+    const char* lance_batch_get_string_value(void* batch, int64_t col_idx, int64_t row_idx);
 }
 
 namespace duckdb {
@@ -147,17 +152,56 @@ static void LanceScanFunc(ClientContext &context, TableFunctionInput &data, Data
         }
     }
     
-    // Convert Arrow batch to DuckDB DataChunk
-    void* arrow_batch = lance_batch_to_arrow(global_state.current_batch);
-    if (!arrow_batch) {
-        throw IOException("Failed to convert Lance batch to Arrow format");
+    // Get the number of rows in the batch
+    idx_t num_rows = lance_batch_num_rows(global_state.current_batch);
+    if (num_rows == 0) {
+        global_state.finished = true;
+        return;
     }
     
-    // For now, simplified conversion - this will need proper implementation
-    idx_t num_rows = lance_batch_num_rows(global_state.current_batch);
     output.SetCardinality(num_rows);
     
-    // TODO: Implement proper Arrow to DuckDB conversion here
+    // Copy data from Lance batch to DuckDB DataChunk
+    for (idx_t col = 0; col < bind_data.column_types.size(); col++) {
+        auto &vec = output.data[col];
+        auto &type = bind_data.column_types[col];
+        
+        if (type == LogicalType::BIGINT) {
+            auto data = FlatVector::GetData<int64_t>(vec);
+            int64_t result = lance_batch_get_int64_column(global_state.current_batch, col, data);
+            if (result < 0) {
+                // Failed to get data, fill with default values
+                for (idx_t row = 0; row < num_rows; row++) {
+                    data[row] = 0;
+                }
+            }
+        } else if (type == LogicalType::DOUBLE) {
+            auto data = FlatVector::GetData<double>(vec);
+            int64_t result = lance_batch_get_float64_column(global_state.current_batch, col, data);
+            if (result < 0) {
+                // Failed to get data, fill with default values
+                for (idx_t row = 0; row < num_rows; row++) {
+                    data[row] = 0.0;
+                }
+            }
+        } else if (type == LogicalType::VARCHAR) {
+            auto data = FlatVector::GetData<string_t>(vec);
+            for (idx_t row = 0; row < num_rows; row++) {
+                const char* str_value = lance_batch_get_string_value(global_state.current_batch, col, row);
+                if (str_value) {
+                    data[row] = StringVector::AddString(vec, str_value);
+                } else {
+                    // Set empty string for null values
+                    data[row] = StringVector::AddString(vec, "");
+                }
+            }
+        } else {
+            // Unsupported type, fill with default values
+            for (idx_t row = 0; row < num_rows; row++) {
+                FlatVector::SetNull(vec, row, true);
+            }
+        }
+    }
     
     // Mark batch as consumed
     lance_free_batch(global_state.current_batch);

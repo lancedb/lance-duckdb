@@ -2,8 +2,9 @@ use std::ffi::{c_char, c_void, CStr, CString};
 use std::ptr;
 use std::sync::Arc;
 
-use arrow::array::RecordBatch;
-use arrow::datatypes::Schema;
+use arrow::array::{make_array, Array, RecordBatch, StructArray};
+use arrow::datatypes::{Schema, Field};
+use arrow::ffi::{FFI_ArrowArray, FFI_ArrowSchema};
 use lance::Dataset;
 use tokio::runtime::Runtime;
 
@@ -176,17 +177,125 @@ pub extern "C" fn lance_batch_num_rows(batch: *mut c_void) -> i64 {
     batch.num_rows() as i64
 }
 
+// Structure to hold Arrow C Data Interface arrays and schema
+#[repr(C)]
+pub struct ArrowArrayStream {
+    array: *mut FFI_ArrowArray,
+    schema: *mut FFI_ArrowSchema,
+}
+
 #[no_mangle]
-pub extern "C" fn lance_batch_to_arrow(batch: *mut c_void) -> *mut c_void {
-    if batch.is_null() {
-        return ptr::null_mut();
+pub extern "C" fn lance_batch_to_arrow_stream(
+    batch: *mut c_void,
+    out_array: *mut FFI_ArrowArray,
+    out_schema: *mut FFI_ArrowSchema,
+) -> i32 {
+    // For now, return error - proper implementation needs more work
+    // The issue is that Arrow-rs FFI support is evolving
+    // We'll use a simpler approach with direct data access
+    return -1;
+}
+
+// Get column as int64 array
+#[no_mangle]
+pub extern "C" fn lance_batch_get_int64_column(
+    batch: *mut c_void,
+    col_idx: i64,
+    out_data: *mut i64,
+) -> i64 {
+    if batch.is_null() || out_data.is_null() {
+        return -1;
     }
     
     let batch = unsafe { &*(batch as *const RecordBatch) };
+    if col_idx < 0 || col_idx as usize >= batch.num_columns() {
+        return -1;
+    }
     
-    // For now, return null - proper Arrow C Data Interface conversion would go here
-    // This requires more complex FFI conversion between RecordBatch and FFI_ArrowArray
-    ptr::null_mut()
+    let column = batch.column(col_idx as usize);
+    
+    // Try to get as Int64Array
+    use arrow::array::Int64Array;
+    if let Some(array) = column.as_any().downcast_ref::<Int64Array>() {
+        let out_slice = unsafe { std::slice::from_raw_parts_mut(out_data, array.len()) };
+        for (i, value) in array.iter().enumerate() {
+            out_slice[i] = value.unwrap_or(0);
+        }
+        return array.len() as i64;
+    }
+    
+    -1
+}
+
+// Get column as float64 array
+#[no_mangle]
+pub extern "C" fn lance_batch_get_float64_column(
+    batch: *mut c_void,
+    col_idx: i64,
+    out_data: *mut f64,
+) -> i64 {
+    if batch.is_null() || out_data.is_null() {
+        return -1;
+    }
+    
+    let batch = unsafe { &*(batch as *const RecordBatch) };
+    if col_idx < 0 || col_idx as usize >= batch.num_columns() {
+        return -1;
+    }
+    
+    let column = batch.column(col_idx as usize);
+    
+    // Try to get as Float64Array
+    use arrow::array::Float64Array;
+    if let Some(array) = column.as_any().downcast_ref::<Float64Array>() {
+        let out_slice = unsafe { std::slice::from_raw_parts_mut(out_data, array.len()) };
+        for (i, value) in array.iter().enumerate() {
+            out_slice[i] = value.unwrap_or(0.0);
+        }
+        return array.len() as i64;
+    }
+    
+    -1
+}
+
+// Get string value from column
+#[no_mangle]
+pub extern "C" fn lance_batch_get_string_value(
+    batch: *mut c_void,
+    col_idx: i64,
+    row_idx: i64,
+) -> *const c_char {
+    if batch.is_null() {
+        return ptr::null();
+    }
+    
+    let batch = unsafe { &*(batch as *const RecordBatch) };
+    if col_idx < 0 || col_idx as usize >= batch.num_columns() {
+        return ptr::null();
+    }
+    if row_idx < 0 || row_idx as usize >= batch.num_rows() {
+        return ptr::null();
+    }
+    
+    let column = batch.column(col_idx as usize);
+    
+    // Try to get as StringArray
+    use arrow::array::StringArray;
+    if let Some(array) = column.as_any().downcast_ref::<StringArray>() {
+        if !array.is_null(row_idx as usize) {
+            let value = array.value(row_idx as usize);
+            match CString::new(value) {
+                Ok(c_str) => {
+                    let ptr = c_str.as_ptr();
+                    std::mem::forget(c_str);
+                    return ptr;
+                }
+                Err(_) => return ptr::null(),
+            }
+        }
+    }
+    
+    ptr::null()
 }
 
 // Writer operations
