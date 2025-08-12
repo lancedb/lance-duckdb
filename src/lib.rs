@@ -2,8 +2,8 @@ use std::ffi::{c_char, c_void, CStr, CString};
 use std::ptr;
 use std::sync::Arc;
 
-use arrow::array::{make_array, Array, RecordBatch, StructArray};
-use arrow::datatypes::{Schema, Field};
+use arrow::array::{Array, RecordBatch, StructArray};
+use arrow::datatypes::Schema;
 use arrow::ffi::{FFI_ArrowArray, FFI_ArrowSchema};
 use lance::Dataset;
 use tokio::runtime::Runtime;
@@ -39,10 +39,10 @@ pub extern "C" fn lance_open_dataset(path: *const c_char) -> *mut c_void {
         Err(_) => return ptr::null_mut(),
     };
     
-    let reader = Box::new(LanceReader {
-        dataset: Arc::new(dataset),
-        runtime: Arc::new(runtime),
-    });
+    let reader = Box::new(LanceReader::new(
+        Arc::new(dataset),
+        Arc::new(runtime),
+    ));
     
     Box::into_raw(reader) as *mut c_void
 }
@@ -177,26 +177,32 @@ pub extern "C" fn lance_batch_num_rows(batch: *mut c_void) -> i64 {
     batch.num_rows() as i64
 }
 
-// Structure to hold Arrow C Data Interface arrays and schema
-#[repr(C)]
-pub struct ArrowArrayStream {
-    array: *mut FFI_ArrowArray,
-    schema: *mut FFI_ArrowSchema,
-}
-
+// Export RecordBatch to Arrow C Data Interface
 #[no_mangle]
-pub extern "C" fn lance_batch_to_arrow_stream(
+pub extern "C" fn lance_batch_to_arrow(
     batch: *mut c_void,
     out_array: *mut FFI_ArrowArray,
     out_schema: *mut FFI_ArrowSchema,
 ) -> i32 {
-    // For now, return error - proper implementation needs more work
-    // The issue is that Arrow-rs FFI support is evolving
-    // We'll use a simpler approach with direct data access
-    return -1;
+    if batch.is_null() || out_array.is_null() || out_schema.is_null() {
+        return -1;
+    }
+    
+    let batch = unsafe { &*(batch as *const RecordBatch) };
+    
+    // Convert RecordBatch to StructArray for FFI export
+    let struct_array: Arc<dyn Array> = Arc::new(StructArray::from(batch.clone()));
+    
+    // Use arrow::ffi::export_array_into_raw to export the data
+    // This function is marked unsafe and deprecated, but it's what we have in arrow 55.2.0
+    match unsafe { arrow::ffi::export_array_into_raw(struct_array, out_array, out_schema) } {
+        Ok(_) => 0,
+        Err(_) => -1,
+    }
 }
 
-// Get column as int64 array
+// Type-specific data access functions
+// TODO: These are temporary - should be replaced with DuckDB's Arrow conversion utilities
 #[no_mangle]
 pub extern "C" fn lance_batch_get_int64_column(
     batch: *mut c_void,
@@ -227,7 +233,6 @@ pub extern "C" fn lance_batch_get_int64_column(
     -1
 }
 
-// Get column as float64 array
 #[no_mangle]
 pub extern "C" fn lance_batch_get_float64_column(
     batch: *mut c_void,
@@ -258,7 +263,6 @@ pub extern "C" fn lance_batch_get_float64_column(
     -1
 }
 
-// Get string value from column
 #[no_mangle]
 pub extern "C" fn lance_batch_get_string_value(
     batch: *mut c_void,
