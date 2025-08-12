@@ -1,3 +1,5 @@
+#![allow(clippy::missing_safety_doc)]
+
 use std::ffi::{c_char, c_void, CStr, CString};
 use std::ptr;
 use std::sync::Arc;
@@ -15,14 +17,13 @@ mod writer;
 use scanner::LanceStream;
 use writer::LanceWriter;
 
-// Dataset operations - just holds the dataset and runtime
+// Dataset operations - just holds the dataset
 struct DatasetHandle {
     dataset: Arc<Dataset>,
-    runtime: Arc<Runtime>,
 }
 
 #[no_mangle]
-pub extern "C" fn lance_open_dataset(path: *const c_char) -> *mut c_void {
+pub unsafe extern "C" fn lance_open_dataset(path: *const c_char) -> *mut c_void {
     if path.is_null() {
         return ptr::null_mut();
     }
@@ -35,7 +36,7 @@ pub extern "C" fn lance_open_dataset(path: *const c_char) -> *mut c_void {
     };
 
     let runtime = match Runtime::new() {
-        Ok(rt) => Arc::new(rt),
+        Ok(rt) => rt,
         Err(_) => return ptr::null_mut(),
     };
 
@@ -44,13 +45,13 @@ pub extern "C" fn lance_open_dataset(path: *const c_char) -> *mut c_void {
         Err(_) => return ptr::null_mut(),
     };
 
-    let handle = Box::new(DatasetHandle { dataset, runtime });
+    let handle = Box::new(DatasetHandle { dataset });
 
     Box::into_raw(handle) as *mut c_void
 }
 
 #[no_mangle]
-pub extern "C" fn lance_close_dataset(dataset: *mut c_void) {
+pub unsafe extern "C" fn lance_close_dataset(dataset: *mut c_void) {
     if !dataset.is_null() {
         unsafe {
             let _ = Box::from_raw(dataset as *mut DatasetHandle);
@@ -60,7 +61,7 @@ pub extern "C" fn lance_close_dataset(dataset: *mut c_void) {
 
 // Schema operations
 #[no_mangle]
-pub extern "C" fn lance_get_schema(dataset: *mut c_void) -> *mut c_void {
+pub unsafe extern "C" fn lance_get_schema(dataset: *mut c_void) -> *mut c_void {
     if dataset.is_null() {
         return ptr::null_mut();
     }
@@ -68,16 +69,13 @@ pub extern "C" fn lance_get_schema(dataset: *mut c_void) -> *mut c_void {
     let handle = unsafe { &*(dataset as *const DatasetHandle) };
     let schema = handle.dataset.schema();
 
-    let arrow_schema: Schema = match schema.try_into() {
-        Ok(s) => s,
-        Err(_) => return ptr::null_mut(),
-    };
+    let arrow_schema: Schema = schema.into();
 
     Box::into_raw(Box::new(Arc::new(arrow_schema))) as *mut c_void
 }
 
 #[no_mangle]
-pub extern "C" fn lance_free_schema(schema: *mut c_void) {
+pub unsafe extern "C" fn lance_free_schema(schema: *mut c_void) {
     if !schema.is_null() {
         unsafe {
             let _ = Box::from_raw(schema as *mut Arc<Schema>);
@@ -86,7 +84,7 @@ pub extern "C" fn lance_free_schema(schema: *mut c_void) {
 }
 
 #[no_mangle]
-pub extern "C" fn lance_schema_num_fields(schema: *mut c_void) -> i64 {
+pub unsafe extern "C" fn lance_schema_num_fields(schema: *mut c_void) -> i64 {
     if schema.is_null() {
         return 0;
     }
@@ -96,7 +94,7 @@ pub extern "C" fn lance_schema_num_fields(schema: *mut c_void) -> i64 {
 }
 
 #[no_mangle]
-pub extern "C" fn lance_schema_field_name(schema: *mut c_void, index: i64) -> *const c_char {
+pub unsafe extern "C" fn lance_schema_field_name(schema: *mut c_void, index: i64) -> *const c_char {
     if schema.is_null() || index < 0 {
         return ptr::null();
     }
@@ -120,7 +118,7 @@ pub extern "C" fn lance_schema_field_name(schema: *mut c_void, index: i64) -> *c
 }
 
 #[no_mangle]
-pub extern "C" fn lance_schema_field_type(schema: *mut c_void, index: i64) -> *const c_char {
+pub unsafe extern "C" fn lance_schema_field_type(schema: *mut c_void, index: i64) -> *const c_char {
     if schema.is_null() || index < 0 {
         return ptr::null();
     }
@@ -147,7 +145,7 @@ pub extern "C" fn lance_schema_field_type(schema: *mut c_void, index: i64) -> *c
 
 // Stream operations
 #[no_mangle]
-pub extern "C" fn lance_create_stream(dataset: *mut c_void) -> *mut c_void {
+pub unsafe extern "C" fn lance_create_stream(dataset: *mut c_void) -> *mut c_void {
     if dataset.is_null() {
         return ptr::null_mut();
     }
@@ -167,7 +165,7 @@ pub extern "C" fn lance_create_stream(dataset: *mut c_void) -> *mut c_void {
 }
 
 #[no_mangle]
-pub extern "C" fn lance_stream_next(stream: *mut c_void) -> *mut c_void {
+pub unsafe extern "C" fn lance_stream_next(stream: *mut c_void) -> *mut c_void {
     if stream.is_null() {
         return ptr::null_mut();
     }
@@ -181,7 +179,7 @@ pub extern "C" fn lance_stream_next(stream: *mut c_void) -> *mut c_void {
 }
 
 #[no_mangle]
-pub extern "C" fn lance_close_stream(stream: *mut c_void) {
+pub unsafe extern "C" fn lance_close_stream(stream: *mut c_void) {
     if !stream.is_null() {
         unsafe {
             let _ = Box::from_raw(stream as *mut LanceStream);
@@ -190,7 +188,7 @@ pub extern "C" fn lance_close_stream(stream: *mut c_void) {
 }
 
 #[no_mangle]
-pub extern "C" fn lance_free_batch(batch: *mut c_void) {
+pub unsafe extern "C" fn lance_free_batch(batch: *mut c_void) {
     if !batch.is_null() {
         unsafe {
             let _ = Box::from_raw(batch as *mut RecordBatch);
@@ -199,7 +197,7 @@ pub extern "C" fn lance_free_batch(batch: *mut c_void) {
 }
 
 #[no_mangle]
-pub extern "C" fn lance_batch_num_rows(batch: *mut c_void) -> i64 {
+pub unsafe extern "C" fn lance_batch_num_rows(batch: *mut c_void) -> i64 {
     if batch.is_null() {
         return 0;
     }
@@ -210,7 +208,7 @@ pub extern "C" fn lance_batch_num_rows(batch: *mut c_void) -> i64 {
 
 // Export RecordBatch to Arrow C Data Interface
 #[no_mangle]
-pub extern "C" fn lance_batch_to_arrow(
+pub unsafe extern "C" fn lance_batch_to_arrow(
     batch: *mut c_void,
     out_array: *mut FFI_ArrowArray,
     out_schema: *mut FFI_ArrowSchema,
@@ -224,18 +222,23 @@ pub extern "C" fn lance_batch_to_arrow(
     // Convert RecordBatch to StructArray for FFI export
     let struct_array: Arc<dyn Array> = Arc::new(StructArray::from(batch.clone()));
 
-    // Use arrow::ffi::export_array_into_raw to export the data
-    // This function is marked unsafe and deprecated, but it's what we have in arrow 55.2.0
-    match unsafe { arrow::ffi::export_array_into_raw(struct_array, out_array, out_schema) } {
-        Ok(_) => 0,
-        Err(_) => -1,
-    }
+    let data = struct_array.to_data();
+    let array = FFI_ArrowArray::new(&data);
+    let schema = match FFI_ArrowSchema::try_from(data.data_type()) {
+        Ok(schema) => schema,
+        Err(_) => return -1,
+    };
+
+    std::ptr::write_unaligned(out_array, array);
+    std::ptr::write_unaligned(out_schema, schema);
+
+    0
 }
 
 // Type-specific data access functions
 // TODO: These are temporary - should be replaced with DuckDB's Arrow conversion utilities
 #[no_mangle]
-pub extern "C" fn lance_batch_get_int64_column(
+pub unsafe extern "C" fn lance_batch_get_int64_column(
     batch: *mut c_void,
     col_idx: i64,
     out_data: *mut i64,
@@ -265,7 +268,7 @@ pub extern "C" fn lance_batch_get_int64_column(
 }
 
 #[no_mangle]
-pub extern "C" fn lance_batch_get_float64_column(
+pub unsafe extern "C" fn lance_batch_get_float64_column(
     batch: *mut c_void,
     col_idx: i64,
     out_data: *mut f64,
@@ -295,7 +298,7 @@ pub extern "C" fn lance_batch_get_float64_column(
 }
 
 #[no_mangle]
-pub extern "C" fn lance_batch_get_string_value(
+pub unsafe extern "C" fn lance_batch_get_string_value(
     batch: *mut c_void,
     col_idx: i64,
     row_idx: i64,
@@ -335,7 +338,7 @@ pub extern "C" fn lance_batch_get_string_value(
 
 // Writer operations
 #[no_mangle]
-pub extern "C" fn lance_create_writer(
+pub unsafe extern "C" fn lance_create_writer(
     path: *const c_char,
     arrow_schema: *mut c_void,
 ) -> *mut c_void {
@@ -359,7 +362,7 @@ pub extern "C" fn lance_create_writer(
 }
 
 #[no_mangle]
-pub extern "C" fn lance_write_batch(writer: *mut c_void, arrow_batch: *mut c_void) {
+pub unsafe extern "C" fn lance_write_batch(writer: *mut c_void, arrow_batch: *mut c_void) {
     if writer.is_null() || arrow_batch.is_null() {
         return;
     }
@@ -371,7 +374,7 @@ pub extern "C" fn lance_write_batch(writer: *mut c_void, arrow_batch: *mut c_voi
 }
 
 #[no_mangle]
-pub extern "C" fn lance_finish_writer(writer: *mut c_void) {
+pub unsafe extern "C" fn lance_finish_writer(writer: *mut c_void) {
     if writer.is_null() {
         return;
     }
@@ -381,7 +384,7 @@ pub extern "C" fn lance_finish_writer(writer: *mut c_void) {
 }
 
 #[no_mangle]
-pub extern "C" fn lance_close_writer(writer: *mut c_void) {
+pub unsafe extern "C" fn lance_close_writer(writer: *mut c_void) {
     if !writer.is_null() {
         unsafe {
             let _ = Box::from_raw(writer as *mut LanceWriter);
@@ -391,7 +394,7 @@ pub extern "C" fn lance_close_writer(writer: *mut c_void) {
 
 // Schema conversion
 #[no_mangle]
-pub extern "C" fn lance_duckdb_to_arrow_schema(
+pub unsafe extern "C" fn lance_duckdb_to_arrow_schema(
     names: *const *const c_char,
     types: *const *const c_char,
     num_fields: i64,
