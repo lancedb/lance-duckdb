@@ -79,5 +79,5 @@ jobs:
       - name: Build and test
         shell: bash
         run: |
-          GEN=ninja make debug
-          GEN=ninja make test_debug
+          GEN=ninja make release
+          GEN=ninja make test_release
