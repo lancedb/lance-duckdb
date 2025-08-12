@@ -12,7 +12,6 @@ This is a DuckDB extension written in Rust that enables native SQL querying of L
 ```bash
 # Initial setup (only needed once)
 git submodule update --init --recursive
-make configure
 
 # Build commands
 GEN=ninja make release         # Production build → build/release/lance.duckdb_extension
