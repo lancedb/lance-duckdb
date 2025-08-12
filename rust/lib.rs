@@ -8,14 +8,19 @@ use arrow::ffi::{FFI_ArrowArray, FFI_ArrowSchema};
 use lance::Dataset;
 use tokio::runtime::Runtime;
 
-mod reader;
-mod writer;
+mod scanner;
 mod types;
+mod writer;
 
-use reader::LanceReader;
+use scanner::LanceStream;
 use writer::LanceWriter;
 
-// Dataset operations
+// Dataset operations - just holds the dataset and runtime
+struct DatasetHandle {
+    dataset: Arc<Dataset>,
+    runtime: Arc<Runtime>,
+}
+
 #[no_mangle]
 pub extern "C" fn lance_open_dataset(path: *const c_char) -> *mut c_void {
     if path.is_null() {
@@ -30,28 +35,28 @@ pub extern "C" fn lance_open_dataset(path: *const c_char) -> *mut c_void {
     };
     
     let runtime = match Runtime::new() {
-        Ok(rt) => rt,
+        Ok(rt) => Arc::new(rt),
         Err(_) => return ptr::null_mut(),
     };
     
     let dataset = match runtime.block_on(Dataset::open(path_str)) {
-        Ok(ds) => ds,
+        Ok(ds) => Arc::new(ds),
         Err(_) => return ptr::null_mut(),
     };
     
-    let reader = Box::new(LanceReader::new(
-        Arc::new(dataset),
-        Arc::new(runtime),
-    ));
+    let handle = Box::new(DatasetHandle {
+        dataset,
+        runtime,
+    });
     
-    Box::into_raw(reader) as *mut c_void
+    Box::into_raw(handle) as *mut c_void
 }
 
 #[no_mangle]
 pub extern "C" fn lance_close_dataset(dataset: *mut c_void) {
     if !dataset.is_null() {
         unsafe {
-            let _ = Box::from_raw(dataset as *mut LanceReader);
+            let _ = Box::from_raw(dataset as *mut DatasetHandle);
         }
     }
 }
@@ -63,8 +68,8 @@ pub extern "C" fn lance_get_schema(dataset: *mut c_void) -> *mut c_void {
         return ptr::null_mut();
     }
     
-    let reader = unsafe { &*(dataset as *const LanceReader) };
-    let schema = reader.dataset.schema();
+    let handle = unsafe { &*(dataset as *const DatasetHandle) };
+    let schema = handle.dataset.schema();
     
     let arrow_schema: Schema = match schema.try_into() {
         Ok(s) => s,
@@ -143,18 +148,47 @@ pub extern "C" fn lance_schema_field_type(schema: *mut c_void, index: i64) -> *c
     }
 }
 
-// Data reading
+// Stream operations
 #[no_mangle]
-pub extern "C" fn lance_read_batch(dataset: *mut c_void) -> *mut c_void {
+pub extern "C" fn lance_create_stream(dataset: *mut c_void) -> *mut c_void {
     if dataset.is_null() {
         return ptr::null_mut();
     }
     
-    let reader = unsafe { &mut *(dataset as *mut LanceReader) };
+    let handle = unsafe { &*(dataset as *const DatasetHandle) };
     
-    match reader.read_next_batch() {
+    // Create a new runtime for this stream to avoid conflicts
+    let runtime = match Runtime::new() {
+        Ok(rt) => rt,
+        Err(_) => return ptr::null_mut(),
+    };
+    
+    match LanceStream::new(&handle.dataset, runtime) {
+        Ok(stream) => Box::into_raw(Box::new(stream)) as *mut c_void,
+        Err(_) => ptr::null_mut(),
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn lance_stream_next(stream: *mut c_void) -> *mut c_void {
+    if stream.is_null() {
+        return ptr::null_mut();
+    }
+    
+    let stream = unsafe { &mut *(stream as *mut LanceStream) };
+    
+    match stream.next() {
         Some(batch) => Box::into_raw(Box::new(batch)) as *mut c_void,
         None => ptr::null_mut(),
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn lance_close_stream(stream: *mut c_void) {
+    if !stream.is_null() {
+        unsafe {
+            let _ = Box::from_raw(stream as *mut LanceStream);
+        }
     }
 }
 

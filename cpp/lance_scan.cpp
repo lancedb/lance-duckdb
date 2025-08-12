@@ -23,8 +23,10 @@ extern "C" {
     const char* lance_schema_field_name(void* schema, int64_t index);
     const char* lance_schema_field_type(void* schema, int64_t index);
     
-    // Data reading
-    void* lance_read_batch(void* dataset);
+    // Stream operations
+    void* lance_create_stream(void* dataset);
+    void* lance_stream_next(void* stream);
+    void lance_close_stream(void* stream);
     void lance_free_batch(void* batch);
     int64_t lance_batch_num_rows(void* batch);
     
@@ -54,13 +56,16 @@ struct LanceScanBindData : public TableFunctionData {
 
 struct LanceScanGlobalState : public GlobalTableFunctionState {
     mutex lock;
-    bool finished = false;
+    void* stream = nullptr;
     void* current_batch = nullptr;
-    idx_t batch_index = 0;
+    bool finished = false;
     
     ~LanceScanGlobalState() {
         if (current_batch) {
             lance_free_batch(current_batch);
+        }
+        if (stream) {
+            lance_close_stream(stream);
         }
     }
 };
@@ -128,7 +133,16 @@ static unique_ptr<FunctionData> LanceScanBind(ClientContext &context, TableFunct
 }
 
 static unique_ptr<GlobalTableFunctionState> LanceScanInit(ClientContext &context, TableFunctionInitInput &input) {
-    return make_uniq<LanceScanGlobalState>();
+    auto state = make_uniq<LanceScanGlobalState>();
+    auto &bind_data = input.bind_data->Cast<LanceScanBindData>();
+    
+    // Create a stream for reading batches
+    state->stream = lance_create_stream(bind_data.dataset);
+    if (!state->stream) {
+        throw IOException("Failed to create Lance stream");
+    }
+    
+    return state;
 }
 
 static unique_ptr<LocalTableFunctionState> LanceScanLocalInit(ExecutionContext &context, TableFunctionInitInput &input,
@@ -146,9 +160,9 @@ static void LanceScanFunc(ClientContext &context, TableFunctionInput &data, Data
         return;
     }
     
-    // Read next batch if needed
+    // Read next batch from stream
     if (!global_state.current_batch) {
-        global_state.current_batch = lance_read_batch(bind_data.dataset);
+        global_state.current_batch = lance_stream_next(global_state.stream);
         if (!global_state.current_batch) {
             global_state.finished = true;
             return;
