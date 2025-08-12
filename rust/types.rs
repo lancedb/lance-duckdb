@@ -43,6 +43,6 @@ pub fn string_to_arrow_type(type_str: &str) -> DataType {
         "binary" => DataType::Binary,
         "date32" => DataType::Date32,
         "date64" => DataType::Date64,
-        _ => DataType::Utf8,  // Default to string
+        _ => DataType::Utf8, // Default to string
     }
 }
