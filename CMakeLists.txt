@@ -7,7 +7,7 @@ set(EXTENSION_NAME ${TARGET_NAME}_extension)
 set(LOADABLE_EXTENSION_NAME ${TARGET_NAME}_loadable_extension)
 
 project(${TARGET_NAME})
-include_directories(src/include)
+include_directories(include)
 
 # Build Rust library first
 set(RUST_LIB_NAME lance_duckdb_ffi)
@@ -37,10 +37,10 @@ add_custom_target(rust_lib ALL DEPENDS ${RUST_LIB_PATH})
 
 # Extension sources
 set(EXTENSION_SOURCES 
-    src/cpp/lance_extension.cpp
-    src/cpp/lance_scan.cpp
-    src/cpp/lance_copy.cpp
-    src/cpp/lance_replacement.cpp
+    cpp/lance_extension.cpp
+    cpp/lance_scan.cpp
+    cpp/lance_copy.cpp
+    cpp/lance_replacement.cpp
 )
 
 # Build static and loadable extensions
