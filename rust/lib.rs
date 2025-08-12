@@ -150,7 +150,7 @@ pub extern "C" fn lance_read_batch(dataset: *mut c_void) -> *mut c_void {
         return ptr::null_mut();
     }
     
-    let reader = unsafe { &*(dataset as *const LanceReader) };
+    let reader = unsafe { &mut *(dataset as *mut LanceReader) };
     
     match reader.read_next_batch() {
         Some(batch) => Box::into_raw(Box::new(batch)) as *mut c_void,
