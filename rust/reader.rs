@@ -22,11 +22,14 @@ impl LanceReader {
     }
     
     pub fn read_next_batch(&self) -> Option<RecordBatch> {
-        let mut batches = self.batches.lock().unwrap();
-        let mut index = self.current_index.lock().unwrap();
+        // Check if we need to load batches first
+        let needs_loading = {
+            let batches = self.batches.lock().unwrap();
+            batches.is_none()
+        };
         
-        // Load batches on first call
-        if batches.is_none() {
+        // Load batches if needed (without holding locks)
+        if needs_loading {
             let scanner = self.dataset.scan();
             let loaded_batches = self.runtime.block_on(async {
                 match scanner.try_into_stream().await {
@@ -47,10 +50,18 @@ impl LanceReader {
                     Err(_) => None,
                 }
             });
-            *batches = loaded_batches;
+            
+            // Store loaded batches
+            let mut batches = self.batches.lock().unwrap();
+            if batches.is_none() {
+                *batches = loaded_batches;
+            }
         }
         
         // Return next batch if available
+        let mut index = self.current_index.lock().unwrap();
+        let batches = self.batches.lock().unwrap();
+        
         if let Some(ref batch_vec) = *batches {
             if *index < batch_vec.len() {
                 let batch = batch_vec[*index].clone();
