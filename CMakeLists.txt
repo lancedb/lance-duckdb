@@ -54,6 +54,12 @@ add_dependencies(${LOADABLE_EXTENSION_NAME} rust_lib)
 target_link_libraries(${EXTENSION_NAME} ${RUST_LIB_PATH})
 target_link_libraries(${LOADABLE_EXTENSION_NAME} ${RUST_LIB_PATH})
 
+# Platform-specific compilation flags
+if(WIN32 AND MINGW)
+    # Enable big object files for MinGW to handle large unity builds
+    add_compile_options(-Wa,-mbig-obj)
+endif()
+
 # Platform-specific linking
 if(APPLE)
     target_link_libraries(${EXTENSION_NAME} 
@@ -64,6 +70,9 @@ if(APPLE)
         "-framework Security" 
         "-framework SystemConfiguration"
         "-framework CoreFoundation")
+elseif(WIN32)
+    target_link_libraries(${EXTENSION_NAME} ws2_32 userenv bcrypt)
+    target_link_libraries(${LOADABLE_EXTENSION_NAME} ws2_32 userenv bcrypt)
 elseif(UNIX)
     target_link_libraries(${EXTENSION_NAME} pthread dl)
     target_link_libraries(${LOADABLE_EXTENSION_NAME} pthread dl)
