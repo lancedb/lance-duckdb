@@ -26,23 +26,44 @@ if(WIN32)
     # Windows with MinGW typically generates .a files with lib prefix
     # Windows with MSVC typically generates .lib files without lib prefix
     if(MINGW)
-        set(RUST_LIB_PATH ${CMAKE_CURRENT_SOURCE_DIR}/target/${RUST_TARGET_DIR}/lib${RUST_LIB_NAME}.a)
+        file(TO_CMAKE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/target/${RUST_TARGET_DIR}/lib${RUST_LIB_NAME}.a" RUST_LIB_PATH)
     else()
-        set(RUST_LIB_PATH ${CMAKE_CURRENT_SOURCE_DIR}/target/${RUST_TARGET_DIR}/${RUST_LIB_NAME}.lib)
+        file(TO_CMAKE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/target/${RUST_TARGET_DIR}/${RUST_LIB_NAME}.lib" RUST_LIB_PATH)
     endif()
 else()
     # Unix-like systems (Linux, macOS)
     set(RUST_LIB_PATH ${CMAKE_CURRENT_SOURCE_DIR}/target/${RUST_TARGET_DIR}/lib${RUST_LIB_NAME}.a)
 endif()
 
+# Print debug information
+message(STATUS "Rust library path: ${RUST_LIB_PATH}")
+message(STATUS "CMAKE_BUILD_TYPE: ${CMAKE_BUILD_TYPE}")
+message(STATUS "RUST_TARGET_DIR: ${RUST_TARGET_DIR}")
+
+# Find cargo executable
+find_program(CARGO_EXECUTABLE cargo)
+if(NOT CARGO_EXECUTABLE)
+    message(FATAL_ERROR "Cargo not found. Please install Rust.")
+endif()
+
 # Custom command to build Rust library
-add_custom_command(
-    OUTPUT ${RUST_LIB_PATH}
-    COMMAND cargo build ${RUST_BUILD_FLAG} --manifest-path ${CMAKE_CURRENT_SOURCE_DIR}/Cargo.toml
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    COMMENT "Building Rust library..."
-    VERBATIM
-)
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    add_custom_command(
+        OUTPUT ${RUST_LIB_PATH}
+        COMMAND ${CARGO_EXECUTABLE} build --release --manifest-path ${CMAKE_CURRENT_SOURCE_DIR}/Cargo.toml
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        COMMENT "Building Rust library (release)..."
+        VERBATIM
+    )
+else()
+    add_custom_command(
+        OUTPUT ${RUST_LIB_PATH}
+        COMMAND ${CARGO_EXECUTABLE} build --manifest-path ${CMAKE_CURRENT_SOURCE_DIR}/Cargo.toml
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        COMMENT "Building Rust library (debug)..."
+        VERBATIM
+    )
+endif()
 
 # Create a custom target for the Rust library
 add_custom_target(rust_lib ALL DEPENDS ${RUST_LIB_PATH})
