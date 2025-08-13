@@ -12,33 +12,40 @@ include_directories(include)
 # Build Rust library first
 set(RUST_LIB_NAME lance_duckdb_ffi)
 
+# Use a controlled output directory for Rust build to avoid target triple issues
+set(RUST_TARGET_DIR ${CMAKE_CURRENT_BINARY_DIR}/rust-build)
+
 # Set Rust library path based on build type
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
     set(RUST_BUILD_FLAG --release)
-    set(RUST_TARGET_DIR release)
+    set(RUST_BUILD_PROFILE release)
 else()
     set(RUST_BUILD_FLAG)
-    set(RUST_TARGET_DIR debug)
+    set(RUST_BUILD_PROFILE debug)
 endif()
 
-# Set Rust library path based on platform
+# Set library file name based on platform
 if(WIN32)
-    # Windows with MinGW typically generates .a files with lib prefix
-    # Windows with MSVC typically generates .lib files without lib prefix
     if(MINGW)
-        file(TO_CMAKE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/target/${RUST_TARGET_DIR}/lib${RUST_LIB_NAME}.a" RUST_LIB_PATH)
+        # MinGW uses .a files with lib prefix
+        set(RUST_LIB_FILENAME lib${RUST_LIB_NAME}.a)
     else()
-        file(TO_CMAKE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/target/${RUST_TARGET_DIR}/${RUST_LIB_NAME}.lib" RUST_LIB_PATH)
+        # MSVC uses .lib files without lib prefix
+        set(RUST_LIB_FILENAME ${RUST_LIB_NAME}.lib)
     endif()
 else()
-    # Unix-like systems (Linux, macOS)
-    set(RUST_LIB_PATH ${CMAKE_CURRENT_SOURCE_DIR}/target/${RUST_TARGET_DIR}/lib${RUST_LIB_NAME}.a)
+    # Unix-like systems use .a files with lib prefix
+    set(RUST_LIB_FILENAME lib${RUST_LIB_NAME}.a)
 endif()
 
+# Full path to the Rust library
+set(RUST_LIB_PATH ${RUST_TARGET_DIR}/${RUST_BUILD_PROFILE}/${RUST_LIB_FILENAME})
+
 # Print debug information
+message(STATUS "Rust target directory: ${RUST_TARGET_DIR}")
 message(STATUS "Rust library path: ${RUST_LIB_PATH}")
 message(STATUS "CMAKE_BUILD_TYPE: ${CMAKE_BUILD_TYPE}")
-message(STATUS "RUST_TARGET_DIR: ${RUST_TARGET_DIR}")
+message(STATUS "RUST_BUILD_PROFILE: ${RUST_BUILD_PROFILE}")
 
 # Find cargo executable
 find_program(CARGO_EXECUTABLE cargo)
@@ -46,21 +53,25 @@ if(NOT CARGO_EXECUTABLE)
     message(FATAL_ERROR "Cargo not found. Please install Rust.")
 endif()
 
-# Custom command to build Rust library
+# Custom command to build Rust library with controlled output directory
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
     add_custom_command(
         OUTPUT ${RUST_LIB_PATH}
-        COMMAND ${CARGO_EXECUTABLE} build --release --manifest-path ${CMAKE_CURRENT_SOURCE_DIR}/Cargo.toml
+        COMMAND ${CARGO_EXECUTABLE} build --release 
+                --target-dir ${RUST_TARGET_DIR}
+                --manifest-path ${CMAKE_CURRENT_SOURCE_DIR}/Cargo.toml
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-        COMMENT "Building Rust library (release)..."
+        COMMENT "Building Rust library (release) to ${RUST_TARGET_DIR}..."
         VERBATIM
     )
 else()
     add_custom_command(
         OUTPUT ${RUST_LIB_PATH}
-        COMMAND ${CARGO_EXECUTABLE} build --manifest-path ${CMAKE_CURRENT_SOURCE_DIR}/Cargo.toml
+        COMMAND ${CARGO_EXECUTABLE} build 
+                --target-dir ${RUST_TARGET_DIR}
+                --manifest-path ${CMAKE_CURRENT_SOURCE_DIR}/Cargo.toml
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-        COMMENT "Building Rust library (debug)..."
+        COMMENT "Building Rust library (debug) to ${RUST_TARGET_DIR}..."
         VERBATIM
     )
 endif()
