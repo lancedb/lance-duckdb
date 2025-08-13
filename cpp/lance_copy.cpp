@@ -127,13 +127,13 @@ static unique_ptr<FunctionData> LanceCopyToBind(ClientContext &context, CopyFunc
 
 static unique_ptr<GlobalFunctionData> LanceCopyToInitGlobal(ClientContext &context, FunctionData &bind_data,
                                                             const string &file_path) {
-    return make_uniq<LanceCopyGlobalState>();
+    return make_uniq_base<GlobalFunctionData, LanceCopyGlobalState>();
 }
 
 static unique_ptr<LocalFunctionData> LanceCopyToInitLocal(ExecutionContext &context, FunctionData &bind_data) {
-    auto local_state = make_uniq<LanceCopyLocalState>();
-    local_state->chunk = make_uniq<DataChunk>();
-    return std::move(local_state);
+    auto local_state = make_uniq_base<LocalFunctionData, LanceCopyLocalState>();
+    local_state->Cast<LanceCopyLocalState>().chunk = make_uniq<DataChunk>();
+    return local_state;
 }
 
 static void LanceCopyToSink(ExecutionContext &context, FunctionData &bind_data_p, GlobalFunctionData &gstate,

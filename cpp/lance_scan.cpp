@@ -133,12 +133,13 @@ static unique_ptr<FunctionData> LanceScanBind(ClientContext &context, TableFunct
 }
 
 static unique_ptr<GlobalTableFunctionState> LanceScanInit(ClientContext &context, TableFunctionInitInput &input) {
-    auto state = make_uniq<LanceScanGlobalState>();
+    auto state = make_uniq_base<GlobalTableFunctionState, LanceScanGlobalState>();
     auto &bind_data = input.bind_data->Cast<LanceScanBindData>();
+    auto &scan_state = state->Cast<LanceScanGlobalState>();
     
     // Create a stream for reading batches
-    state->stream = lance_create_stream(bind_data.dataset);
-    if (!state->stream) {
+    scan_state.stream = lance_create_stream(bind_data.dataset);
+    if (!scan_state.stream) {
         throw IOException("Failed to create Lance stream");
     }
     
@@ -147,7 +148,7 @@ static unique_ptr<GlobalTableFunctionState> LanceScanInit(ClientContext &context
 
 static unique_ptr<LocalTableFunctionState> LanceScanLocalInit(ExecutionContext &context, TableFunctionInitInput &input,
                                                               GlobalTableFunctionState *global_state) {
-    return make_uniq<LanceScanLocalState>();
+    return make_uniq_base<LocalTableFunctionState, LanceScanLocalState>();
 }
 
 static void LanceScanFunc(ClientContext &context, TableFunctionInput &data, DataChunk &output) {
