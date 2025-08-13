@@ -21,7 +21,19 @@ else()
     set(RUST_TARGET_DIR debug)
 endif()
 
-set(RUST_LIB_PATH ${CMAKE_CURRENT_SOURCE_DIR}/target/${RUST_TARGET_DIR}/lib${RUST_LIB_NAME}.a)
+# Set Rust library path based on platform
+if(WIN32)
+    # Windows with MinGW typically generates .a files with lib prefix
+    # Windows with MSVC typically generates .lib files without lib prefix
+    if(MINGW)
+        set(RUST_LIB_PATH ${CMAKE_CURRENT_SOURCE_DIR}/target/${RUST_TARGET_DIR}/lib${RUST_LIB_NAME}.a)
+    else()
+        set(RUST_LIB_PATH ${CMAKE_CURRENT_SOURCE_DIR}/target/${RUST_TARGET_DIR}/${RUST_LIB_NAME}.lib)
+    endif()
+else()
+    # Unix-like systems (Linux, macOS)
+    set(RUST_LIB_PATH ${CMAKE_CURRENT_SOURCE_DIR}/target/${RUST_TARGET_DIR}/lib${RUST_LIB_NAME}.a)
+endif()
 
 # Custom command to build Rust library
 add_custom_command(
