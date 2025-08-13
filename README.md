@@ -1,133 +1,81 @@
-# Lance DuckDB Extension
+# Lance
 
-A DuckDB extension that enables native querying of Lance format datasets, including support for cloud storage (S3, Azure, GCS).
-
-## Features
-
-- **Native Lance Support**: Query `.lance` files directly using SQL
-- **Cloud Storage**: Seamlessly query Lance datasets on S3, Azure Blob Storage, and Google Cloud Storage
-- **Table Function**: Use `lance_scan()` to read Lance datasets
-- **Arrow Integration**: Automatic Arrow to DuckDB type conversion
-- **Performance**: Optimized for analytical workloads with Lance's columnar format
+This extension, Lance, allow you to ... <extension_goal>
 
 ## Building
+### Managing dependencies
+DuckDB extensions uses VCPKG for dependency management. Enabling VCPKG is very simple: follow the [installation instructions](https://vcpkg.io/en/getting-started) or just run the following:
+```shell
+git clone https://github.com/Microsoft/vcpkg.git
+./vcpkg/bootstrap-vcpkg.sh
+export VCPKG_TOOLCHAIN_PATH=`pwd`/vcpkg/scripts/buildsystems/vcpkg.cmake
+```
+Note: VCPKG is only required for extensions that want to rely on it for dependency management. If you want to develop an extension without dependencies, or want to do your own dependency management, just skip this step. Note that the example extension uses VCPKG to build with a dependency for instructive purposes, so when skipping this step the build may not work without removing the dependency.
 
-### Prerequisites
+### Build steps
+Now to build the extension, run:
+```sh
+make
+```
+The main binaries that will be built are:
+```sh
+./build/release/duckdb
+./build/release/test/unittest
+./build/release/extension/lance/lance.duckdb_extension
+```
+- `duckdb` is the binary for the duckdb shell with the extension code automatically loaded.
+- `unittest` is the test runner of duckdb. Again, the extension is already linked into the binary.
+- `lance.duckdb_extension` is the loadable binary as it would be distributed.
 
-- Rust toolchain
-- DuckDB development files
-- Make
+## Running the extension
+To run the extension code, simply start the shell with `./build/release/duckdb`.
 
-### Build Steps
-
-```bash
-# Initialize submodules
-git submodule update --init --recursive
-
-# Configure the build
-make configure
-
-# Build the extension
-make release
+Now we can use the features from the extension directly in DuckDB. The template contains a single scalar function `lance()` that takes a string arguments and returns a string:
+```
+D select lance('Jane') as result;
+┌───────────────┐
+│    result     │
+│    varchar    │
+├───────────────┤
+│ Lance Jane 🐥 │
+└───────────────┘
 ```
 
-The built extension will be available at `build/release/lance.duckdb_extension`.
-
-## Installation
-
-```sql
--- Load the extension (with -unsigned flag for local builds)
-LOAD 'path/to/lance.duckdb_extension';
-```
-
-## Usage
-
-### Basic Query
-
-```sql
--- Query a local Lance file
-SELECT * FROM lance_scan('path/to/dataset.lance');
-
--- Query from S3
-SELECT * FROM lance_scan('s3://bucket/path/dataset.lance');
-
--- Aggregations
-SELECT COUNT(*), AVG(value) 
-FROM lance_scan('data.lance') 
-WHERE category = 'A';
-```
-
-### With Filters and Projections
-
-```sql
--- Select specific columns
-SELECT id, name, timestamp 
-FROM lance_scan('dataset.lance')
-WHERE timestamp >= '2024-01-01'
-ORDER BY timestamp DESC
-LIMIT 100;
-```
-
-## Development
-
-### Project Structure
-
-```
-├── src/
-│   ├── lib.rs           # Extension entry point
-│   ├── lance_scan.rs    # Lance scan table function
-│   ├── replacement_scan.rs # Replacement scan (future)
-│   └── types.rs         # Arrow to DuckDB type mapping
-└── test/
-    ├── sql/            # SQL test files
-    └── test_data.lance/ # Test Lance dataset
-```
-
-### Running Tests
-
-```bash
-# Run all tests (builds release and runs SQL tests)
+## Running the tests
+Different tests can be created for DuckDB extensions. The primary way of testing DuckDB extensions should be the SQL tests in `./test/sql`. These SQL tests can be run using:
+```sh
 make test
-
-# Run debug tests
-make test_debug
-
-# Run quick smoke test
-make test_quick
-
-# Run Rust tests
-cargo test
 ```
 
-### Running Clippy
+### Installing the deployed binaries
+To install your extension binaries from S3, you will need to do two things. Firstly, DuckDB should be launched with the
+`allow_unsigned_extensions` option set to true. How to set this will depend on the client you're using. Some examples:
 
-```bash
-cargo clippy --all-targets --all-features
+CLI:
+```shell
+duckdb -unsigned
 ```
 
-## Roadmap
+Python:
+```python
+con = duckdb.connect(':memory:', config={'allow_unsigned_extensions' : 'true'})
+```
 
-- [x] Basic `lance_scan` table function
-- [x] Arrow to DuckDB type mapping
-- [x] Full Lance dataset reading
-- [ ] Predicate pushdown
-- [ ] Projection pushdown
-- [ ] Replacement scan for `.lance` files (requires duckdb-rs API enhancement)
-- [ ] Streaming reads for large datasets
-- [ ] Write support (COPY TO)
-- [ ] Vector index support
+NodeJS:
+```js
+db = new duckdb.Database(':memory:', {"allow_unsigned_extensions": "true"});
+```
 
-## Contributing
+Secondly, you will need to set the repository endpoint in DuckDB to the HTTP url of your bucket + version of the extension
+you want to install. To do this run the following SQL query in DuckDB:
+```sql
+SET custom_extension_repository='bucket.s3.eu-west-1.amazonaws.com/<your_extension_name>/latest';
+```
+Note that the `/latest` path will allow you to install the latest extension version available for your current version of
+DuckDB. To specify a specific version, you can pass the version instead.
 
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## License
-
-Apache 2.0
-
-## Acknowledgments
-
-Built on top of:
-- [Lance](https://github.com/lancedb/lance) - Modern columnar data format
-- [DuckDB](https://duckdb.org) - In-process analytical database
-- [Apache Arrow](https://arrow.apache.org) - Columnar memory format
+After running these steps, you can install and load your extension using the regular INSTALL/LOAD commands in DuckDB:
+```sql
+INSTALL lance
+LOAD lance
+```
