@@ -3,128 +3,23 @@ cmake_minimum_required(VERSION 3.5)
 # Set extension name here
 set(TARGET_NAME lance)
 
+# No external dependencies for now
+
 set(EXTENSION_NAME ${TARGET_NAME}_extension)
 set(LOADABLE_EXTENSION_NAME ${TARGET_NAME}_loadable_extension)
 
 project(${TARGET_NAME})
-include_directories(include)
+include_directories(src/include)
 
-# Build Rust library first
-set(RUST_LIB_NAME lance_duckdb_ffi)
+set(EXTENSION_SOURCES src/lance_extension.cpp src/lance_scan.cpp)
 
-# Use a controlled output directory for Rust build to avoid target triple issues
-set(RUST_TARGET_DIR ${CMAKE_CURRENT_BINARY_DIR}/rust-build)
-
-# Set Rust library path based on build type
-if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    set(RUST_BUILD_FLAG --release)
-    set(RUST_BUILD_PROFILE release)
-else()
-    set(RUST_BUILD_FLAG)
-    set(RUST_BUILD_PROFILE debug)
-endif()
-
-# Set library file name based on platform
-if(WIN32)
-    if(MINGW)
-        # MinGW uses .a files with lib prefix
-        set(RUST_LIB_FILENAME lib${RUST_LIB_NAME}.a)
-    else()
-        # MSVC uses .lib files without lib prefix
-        set(RUST_LIB_FILENAME ${RUST_LIB_NAME}.lib)
-    endif()
-else()
-    # Unix-like systems use .a files with lib prefix
-    set(RUST_LIB_FILENAME lib${RUST_LIB_NAME}.a)
-endif()
-
-# Full path to the Rust library
-set(RUST_LIB_PATH ${RUST_TARGET_DIR}/${RUST_BUILD_PROFILE}/${RUST_LIB_FILENAME})
-
-# Print debug information
-message(STATUS "Rust target directory: ${RUST_TARGET_DIR}")
-message(STATUS "Rust library path: ${RUST_LIB_PATH}")
-message(STATUS "CMAKE_BUILD_TYPE: ${CMAKE_BUILD_TYPE}")
-message(STATUS "RUST_BUILD_PROFILE: ${RUST_BUILD_PROFILE}")
-
-# Find cargo executable
-find_program(CARGO_EXECUTABLE cargo)
-if(NOT CARGO_EXECUTABLE)
-    message(FATAL_ERROR "Cargo not found. Please install Rust.")
-endif()
-
-# Custom command to build Rust library with controlled output directory
-if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    add_custom_command(
-        OUTPUT ${RUST_LIB_PATH}
-        COMMAND ${CARGO_EXECUTABLE} build --release 
-                --target-dir ${RUST_TARGET_DIR}
-                --manifest-path ${CMAKE_CURRENT_SOURCE_DIR}/Cargo.toml
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-        COMMENT "Building Rust library (release) to ${RUST_TARGET_DIR}..."
-        VERBATIM
-    )
-else()
-    add_custom_command(
-        OUTPUT ${RUST_LIB_PATH}
-        COMMAND ${CARGO_EXECUTABLE} build 
-                --target-dir ${RUST_TARGET_DIR}
-                --manifest-path ${CMAKE_CURRENT_SOURCE_DIR}/Cargo.toml
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-        COMMENT "Building Rust library (debug) to ${RUST_TARGET_DIR}..."
-        VERBATIM
-    )
-endif()
-
-# Create a custom target for the Rust library
-add_custom_target(rust_lib ALL DEPENDS ${RUST_LIB_PATH})
-
-# Extension sources
-set(EXTENSION_SOURCES 
-    cpp/lance_extension.cpp
-    cpp/lance_scan.cpp
-    cpp/lance_copy.cpp
-    cpp/lance_replacement.cpp
-)
-
-# Build static and loadable extensions
 build_static_extension(${TARGET_NAME} ${EXTENSION_SOURCES})
 build_loadable_extension(${TARGET_NAME} " " ${EXTENSION_SOURCES})
 
-# Link Rust library
-add_dependencies(${EXTENSION_NAME} rust_lib)
-add_dependencies(${LOADABLE_EXTENSION_NAME} rust_lib)
-
-target_link_libraries(${EXTENSION_NAME} ${RUST_LIB_PATH})
-target_link_libraries(${LOADABLE_EXTENSION_NAME} ${RUST_LIB_PATH})
-
-# Platform-specific compilation flags
-if(WIN32 AND MINGW)
-    # Enable big object files for MinGW to handle large unity builds
-    add_compile_options(-Wa,-mbig-obj)
-endif()
-
-# Platform-specific linking
-if(APPLE)
-    target_link_libraries(${EXTENSION_NAME} 
-        "-framework Security" 
-        "-framework SystemConfiguration"
-        "-framework CoreFoundation")
-    target_link_libraries(${LOADABLE_EXTENSION_NAME} 
-        "-framework Security" 
-        "-framework SystemConfiguration"
-        "-framework CoreFoundation")
-elseif(WIN32)
-    target_link_libraries(${EXTENSION_NAME} ws2_32 userenv bcrypt)
-    target_link_libraries(${LOADABLE_EXTENSION_NAME} ws2_32 userenv bcrypt)
-elseif(UNIX)
-    target_link_libraries(${EXTENSION_NAME} pthread dl)
-    target_link_libraries(${LOADABLE_EXTENSION_NAME} pthread dl)
-endif()
+# No external libraries to link
 
 install(
-    TARGETS ${EXTENSION_NAME}
-    EXPORT "${DUCKDB_EXPORT_SET}"
-    LIBRARY DESTINATION "${INSTALL_LIB_DIR}"
-    ARCHIVE DESTINATION "${INSTALL_LIB_DIR}"
-)
+  TARGETS ${EXTENSION_NAME}
+  EXPORT "${DUCKDB_EXPORT_SET}"
+  LIBRARY DESTINATION "${INSTALL_LIB_DIR}"
+  ARCHIVE DESTINATION "${INSTALL_LIB_DIR}")
